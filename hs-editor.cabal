@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       Lib
+      ViewPort
   other-modules:
       Paths_hs_editor
   autogen-modules:
@@ -55,6 +56,7 @@ test-suite hs-editor-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      ViewPortSpec
       Paths_hs_editor
   autogen-modules:
       Paths_hs_editor
@@ -62,6 +64,9 @@ test-suite hs-editor-test
       test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      QuickCheck
+    , base >=4.7 && <5
     , hs-editor
+    , hspec
+    , hspec-discover
   default-language: Haskell2010

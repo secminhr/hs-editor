@@ -1,0 +1,4 @@
+{
+    "haskell.plugin.hlint.codeActionsOn": false,
+    "haskell.plugin.hlint.diagnosticsOn": false
+}
