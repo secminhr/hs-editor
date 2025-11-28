@@ -15,12 +15,12 @@ spec = do
         \totalLineNo movements -> 
             forAll (vectorOf (getPositive totalLineNo) arbitrary) $ \totalColPerLinePositive ->
             let totalColPerLine = map getPositive totalColPerLinePositive 
-                movement = makeCursorMovement (getPositive totalLineNo) totalColPerLine
+                movement = makeCursorMovement (getPositive totalLineNo) (totalColPerLine !!)
                 (finalLineNo, finalColNo) = applyCursorMovement movement movements (1, 1) in 
                     1 <= finalLineNo && finalLineNo <= getPositive totalLineNo && 
                     1 <= finalColNo && finalColNo <= (totalColPerLine !! (finalLineNo - 1))
     describe "For a Cursor Movement with 3 lines and each line has 3 characters, the cursor starting from (2, 2)" $ do 
-        let movement = makeCursorMovement 3 [3, 3, 3] 
+        let movement = makeCursorMovement 3 (const 3)
         let cursor = (2, 2)
         it "should move to (1, 2) after CursorUp" $ do 
             applyCursorMovement movement [CursorUp] cursor `shouldBe` (1, 2)

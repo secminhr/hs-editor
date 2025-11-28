@@ -18,11 +18,11 @@ data CursorMovement = CursorMovement
 
 data CursorMovementDsl = CursorUp | CursorRight | CursorDown | CursorLeft deriving (Show)
 
-dslToMovement :: CursorMovementDsl -> CursorMovement -> Cursor -> Cursor
-dslToMovement CursorUp = cursorUp
-dslToMovement CursorRight = cursorRight
-dslToMovement CursorDown = cursorDown
-dslToMovement CursorLeft = cursorLeft
+dslToMovement :: CursorMovement -> CursorMovementDsl -> Cursor -> Cursor
+dslToMovement m CursorUp = cursorUp m
+dslToMovement m CursorRight = cursorRight m
+dslToMovement m CursorDown = cursorDown m
+dslToMovement m CursorLeft = cursorLeft m
 
 mapFst :: (a -> b) -> (a, c) -> (b, c)
 mapFst f (a, b) = (f a, b)
@@ -33,22 +33,21 @@ mapSnd f (a, b) = (a, f b)
 wrapped :: Int -> Int -> Int 
 wrapped upper = max 1 . min upper
 
-wrapCursor :: Int -> [Int] -> Cursor -> Cursor
-wrapCursor maxLineNo maxColNoPerLine (lineNo, colNo) = 
+wrapCursor :: Int -> (Int -> Int) -> Cursor -> Cursor
+wrapCursor maxLineNo getMaxColNo (lineNo, colNo) = 
     let wrappedLine = wrapped maxLineNo lineNo 
-        wrappedCol = wrapped (maxColNoPerLine !! (wrappedLine - 1)) colNo in 
+        wrappedCol = wrapped (getMaxColNo (wrappedLine - 1)) colNo in 
             (wrappedLine, wrappedCol)
     
-makeCursorMovement :: Int -> [Int] -> CursorMovement
-makeCursorMovement maxLineNo maxColNoPerLine = CursorMovement
-    (wrapCursor maxLineNo maxColNoPerLine . mapFst (-1 + ))
-    (wrapCursor maxLineNo maxColNoPerLine . mapSnd (+ 1))
-    (wrapCursor maxLineNo maxColNoPerLine . mapFst (+ 1))
-    (wrapCursor maxLineNo maxColNoPerLine . mapSnd (-1 + ))
+makeCursorMovement :: Int -> (Int -> Int) -> CursorMovement
+makeCursorMovement maxLineNo getMaxColNo = CursorMovement
+    (wrapCursor maxLineNo getMaxColNo . mapFst (-1 + ))
+    (wrapCursor maxLineNo getMaxColNo . mapSnd (+ 1))
+    (wrapCursor maxLineNo getMaxColNo . mapFst (+ 1))
+    (wrapCursor maxLineNo getMaxColNo . mapSnd (-1 + ))
 
 applyCursorMovement :: CursorMovement -> [CursorMovementDsl] -> Cursor -> Cursor
-applyCursorMovement m l c = applyCursorMovement' (map (\cmd -> dslToMovement cmd m) l) c
+applyCursorMovement m l c = applyCursorMovement' (map (dslToMovement m) l) c
 
 applyCursorMovement' :: [Cursor -> Cursor] -> Cursor -> Cursor
-applyCursorMovement' [] c = c 
-applyCursorMovement' (m:ms) c = applyCursorMovement' ms $ m c
+applyCursorMovement' = foldr (.) id
