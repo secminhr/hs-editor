@@ -25,6 +25,8 @@ source-repository head
 
 library
   exposed-modules:
+      CursorMovement
+      Editor
       Lib
       ViewPort
   other-modules:
@@ -56,6 +58,8 @@ test-suite hs-editor-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      CursorMovementSpec
+      EditorSpec
       ViewPortSpec
       Paths_hs_editor
   autogen-modules:
