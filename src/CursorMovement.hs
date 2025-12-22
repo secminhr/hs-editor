@@ -4,11 +4,20 @@ module CursorMovement
     , CursorMovement    
     , CursorMovementDsl(..)
     , Cursor 
+    , rowNo
+    , colNo
     ) where 
 
 import ViewPort
 
 type Cursor = Position
+
+rowNo :: Cursor -> Int
+rowNo = fst 
+
+colNo :: Cursor -> Int
+colNo = snd
+
 data CursorMovement = CursorMovement 
     { cursorUp :: Cursor -> Cursor
     , cursorRight :: Cursor -> Cursor

@@ -1,4 +1,4 @@
-module ViewPort(ViewPort, openViewPort, getContent, Position) where 
+module ViewPort(ViewPort, openViewPort, getContent, Position, Buffer) where 
 
 type Buffer = [String]
 type LineNo = Int
