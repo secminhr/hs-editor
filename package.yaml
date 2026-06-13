@@ -57,3 +57,6 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - hs-editor
+    - hspec
+    - hspec-discover
+    - QuickCheck
