@@ -1,6 +1,7 @@
 module Viewport
         ( Viewport
-        , inside
+        , startingRow
+        , startingCol
         , viewAt
         , new 
         , scrollV
@@ -11,7 +12,8 @@ module Viewport
     Viewport of a piece of text
 
     Observation: 
-        displayMask :: Viewport -> (height :: Int) -> (width :: Int) -> (row :: Int) -> (col :: Int) -> Bool
+        startingRow :: Viewport -> Int
+        startingCol :: Viewport -> Int
 
     Constructor:
         new :: Viewport
@@ -55,11 +57,13 @@ module Viewport
             scrollV vo (scrollH ho (viewAt initVo initHo h w)) = 
                 viewAt (initVo + vo) (initHo + ho) h w
 
-        # Using (Positive Int) as the type of h and w would be more reasonable
-        # but by this law, when h <= 0 or w <= 0 we automatically get a viewport that displays nothing
-        displayMask/viewAt:
-        forall (vo :: Int) (ho :: Int) (h :: Int) (w :: Int) (r :: Int) (c :: Int).
-            displayMask (viewAt vo ho) h w r c = vo <= r < vo+h && ho <= c < ho+w
+        startingRow/viewAt:
+        forall (vo :: Int) (ho :: Int).
+            startingRow (viewAt vo ho) = vo
+
+        startingCol/viewAt:
+        forall (vo :: Int) (ho :: Int).
+            startingCol (viewAt vo ho) = ho
 
 -}
 
@@ -67,8 +71,11 @@ data Viewport
     = ViewAt Int Int
     deriving (Show, Eq)
 
-inside :: Viewport -> Int -> Int -> Int -> Int -> Bool
-inside (ViewAt vo ho) h w r c = vo <= r && r < vo+h && ho <= c && c < ho+w
+startingRow :: Viewport -> Int
+startingRow (ViewAt vo _) = vo
+
+startingCol :: Viewport -> Int
+startingCol (ViewAt _ ho) = ho
 
 viewAt :: Int -> Int -> Viewport
 viewAt = ViewAt

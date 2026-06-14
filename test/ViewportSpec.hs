@@ -44,7 +44,9 @@ spec = do
         \vo ho initVo initHo ->
             scrollV vo (scrollH ho (viewAt initVo initHo)) `shouldBe` viewAt (initVo + vo) (initHo + ho)
 
-    prop "inside/viewAt" $ 
-        \vo ho h w r c ->
-            inside (viewAt vo ho) h w r c `shouldBe` (vo <= r && r < vo+h && ho <= c && c < ho+w)
+    prop "startingRow/viewAt" $ 
+        \vo ho -> startingRow (viewAt vo ho) `shouldBe` vo
+    
+    prop "startingCol/viewAt" $ 
+        \vo ho -> startingCol (viewAt vo ho) `shouldBe` ho
     

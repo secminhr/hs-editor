@@ -46,6 +46,10 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - hs-editor
+    - brick
+    - vty >= 6.0
+    - vty-crossplatform
+    - microlens-platform
 
 tests:
   hs-editor-test:
