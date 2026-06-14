@@ -10,9 +10,8 @@ instance Arbitrary Viewport where
     arbitrary = do 
         vo <- chooseInt (-1, maxBound)
         ho <- chooseInt (-1, maxBound)
-        h <- arbitrary :: Gen Int
-        w <- arbitrary :: Gen Int
-        return $ viewAt vo ho h w
+
+        return $ viewAt vo ho
 
 infix 1 ~=
 (~=) :: (Eq b, Show b) => (a -> b) -> (a -> b) -> a -> Expectation
@@ -39,13 +38,13 @@ spec = do
             (scrollH ho . scrollV vo) ~= (scrollV vo . scrollH ho)
     
     prop "viewAt/new" $ 
-        \h w -> new h w `shouldBe` viewAt 0 0 h w
+        new `shouldBe` viewAt 0 0
 
     prop "viewAt/scrollV/scrollH/viewAt" $ 
-        \vo ho h w initVo initHo ->
-            scrollV vo (scrollH ho (viewAt initVo initHo h w)) `shouldBe` viewAt (initVo + vo) (initHo + ho) h w
+        \vo ho initVo initHo ->
+            scrollV vo (scrollH ho (viewAt initVo initHo)) `shouldBe` viewAt (initVo + vo) (initHo + ho)
 
     prop "inside/viewAt" $ 
         \vo ho h w r c ->
-            inside (viewAt vo ho h w) r c `shouldBe` (vo <= r && r < vo+h && ho <= c && c < ho+w)
+            inside (viewAt vo ho) h w r c `shouldBe` (vo <= r && r < vo+h && ho <= c && c < ho+w)
     

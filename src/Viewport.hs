@@ -11,17 +11,17 @@ module Viewport
     Viewport of a piece of text
 
     Observation: 
-        displayMask :: Viewport -> (row :: Int) -> (col :: Int) -> Bool
+        displayMask :: Viewport -> (height :: Int) -> (width :: Int) -> (row :: Int) -> (col :: Int) -> Bool
 
     Constructor:
-        new :: (height :: Int) -> (width :: Int) -> Viewport
+        new :: Viewport
 
         # positive offset indicates a scroll down, negative indicates a scroll up
         scrollV :: Int -> Viewport -> Viewport
         # positive offset indicates a scroll right, negative indicates a scroll left
         scrollH :: Int -> Viewport -> Viewport
 
-        viewAt :: (vOffset :: Int) -> (hOffset :: Int) -> (height :: Int) -> (width :: Int) -> Viewport
+        viewAt :: (vOffset :: Int) -> (hOffset :: Int) -> Viewport
     
     Equation:
         scrollV-id:
@@ -46,9 +46,9 @@ module Viewport
         forall (vOffset :: Int) (hOffset :: Int).
             viewAt vOffset hOffset = scrollV vOffset . scrollH hOffset . new
 
-        viewAt/new":
+        viewAt/new:
         forall (h :: Int) (w :: Int).
-                new = viewAt 0 0
+            new = viewAt 0 0
 
         viewAt/scrollV/scrollH/viewAt:
         forall (vo :: Int) (ho :: Int) (h :: Int) (w :: Int) (initVo :: Int) (initHo :: Int).
@@ -59,25 +59,25 @@ module Viewport
         # but by this law, when h <= 0 or w <= 0 we automatically get a viewport that displays nothing
         displayMask/viewAt:
         forall (vo :: Int) (ho :: Int) (h :: Int) (w :: Int) (r :: Int) (c :: Int).
-            displayMask (viewAt vo ho h w) r c = vo <= r < vo+h && ho <= c < ho+w
+            displayMask (viewAt vo ho) h w r c = vo <= r < vo+h && ho <= c < ho+w
 
 -}
 
 data Viewport 
-    = ViewAt Int Int Int Int
+    = ViewAt Int Int
     deriving (Show, Eq)
 
-inside :: Viewport -> Int -> Int -> Bool
-inside (ViewAt vo ho h w) r c = vo <= r && r < vo+h && ho <= c && c < ho+w
+inside :: Viewport -> Int -> Int -> Int -> Int -> Bool
+inside (ViewAt vo ho) h w r c = vo <= r && r < vo+h && ho <= c && c < ho+w
 
-viewAt :: Int -> Int -> Int -> Int -> Viewport
+viewAt :: Int -> Int -> Viewport
 viewAt = ViewAt
 
-new :: Int -> Int -> Viewport
+new :: Viewport
 new = ViewAt 0 0
 
 scrollV :: Int -> Viewport -> Viewport
-scrollV offset (ViewAt vo ho h w) = ViewAt (vo + offset) ho h w
+scrollV offset (ViewAt vo ho) = ViewAt (vo + offset) ho
 
 scrollH :: Int -> Viewport -> Viewport
-scrollH offset (ViewAt vo ho h w) = ViewAt vo (ho + offset) h w
+scrollH offset (ViewAt vo ho) = ViewAt vo (ho + offset)
