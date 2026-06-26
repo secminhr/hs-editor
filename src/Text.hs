@@ -15,9 +15,9 @@ module Text
     , LowerBounded(..)
     ) where 
 
-import Data.Maybe (fromMaybe, fromJust)
 import Data.List.Split (splitOn)
-import Data.Foldable (find)
+import qualified Data.Map as M
+import Data.List (intercalate)
 
 newtype String' = String' String deriving (Show, Eq, Ord)
 (+++) :: String' -> String' -> String'
@@ -29,39 +29,47 @@ singleLineString s = if '\n' `elem` s then Nothing else Just $ String' s
 string :: String' -> String 
 string (String' s) = s
 
-data Text ri ci
-    = Empty 
-    | UpdateRow ri (String' -> String') (Text ri ci)
-    | Merge ri (Text ri ci)
-    | Split ri ci (Text ri ci)
+data Text ri ci = Content (M.Map ri String')
 
 instance (Show ri, Show ci) => Show (Text ri ci) where
-  show Empty = "Empty"
-  show (UpdateRow r _ t) = "UpdateRow " ++ show r ++ " <fn> (" ++ show t ++ ")"
-  show (Merge r t) = "Merge " ++ show r ++ " (" ++ show t ++ ")"
-  show (Split r c t) = "Split " ++ show r ++ " " ++ show c ++ " (" ++ show t ++ ")"
-
-
+    show (Content m) = show m
+  
 class LowerBounded a where 
     lowerbound :: a 
 
-row :: (LowerBounded ri, Ord ri, Enum ri, LowerBounded ci, Enum ci, Eq ci) => ri -> Text ri ci -> Maybe String' 
-row r Empty = if r == lowerbound then Just (String' "") else Nothing
-row r1 (UpdateRow r2 f t)
-    | r1 == r2 = f <$> row r2 t
-    | otherwise = row r1 t
-row r1 (Merge r2 t)
-    | r1 < r2 = row r1 t 
-    | r1 == r2 = do 
-        row1 <- row r1 t 
-        let row2 = fromMaybe (String' "") $ row (succ r2) t
-        return $ row1 +++ row2
-    | otherwise = row (succ r1) t 
-row r1 (Split r2 c t) 
-    | r1 < r2 = row r1 t 
-    | r1 == r2 = take' c <$> row r2 t 
-    | r1 == succ r2 = drop' c <$> row r2 t 
-    | otherwise = row (pred r1) t 
+row :: (Ord ri) => ri -> Text ri ci -> Maybe String' 
+row r (Content m) = M.lookup r m
+
+lastRowAvailable :: Text ri ci -> ri 
+lastRowAvailable (Content m) = fst $ M.findMax m
+
+flatten :: Text ri ci -> String 
+flatten (Content m) = intercalate "\n" $ map (string . snd) $ M.toAscList m
+
+empty :: (LowerBounded ri) => Text ri ci 
+empty = Content $ M.singleton lowerbound $ String' ""
+
+updateRow :: (Ord ri) => ri -> (String' -> String') -> Text ri ci -> Text ri ci 
+updateRow r f (Content m) = Content $ M.adjust f r m
+
+merge :: (Ord ri, Enum ri) => ri -> Text ri ci -> Text ri ci
+merge r (Content m) = Content $ 
+    case M.splitLookup r m of 
+        (_, Nothing, _) -> m
+        (beforeR, Just rRow, afterR) -> 
+            let newRow = rRow +++ M.findWithDefault (String' "") (succ r) afterR in
+                -- union is left-biased, so newRow is preferred than the value in mapKeys
+                M.unions [beforeR, M.singleton r newRow, M.mapKeys pred afterR]
+        
+
+split :: (Ord ri, Enum ri, LowerBounded ci, Enum ci, Eq ci) => ri -> ci -> Text ri ci -> Text ri ci
+split r c (Content m) = Content $
+    case M.splitLookup r m of 
+        (_, Nothing, _) -> m 
+        (beforeR, Just rRow, afterR) -> 
+            let splitL1 = take' c rRow
+                splitL2 = drop' c rRow in 
+                    M.unions [beforeR, M.singleton r splitL1, M.singleton (succ r) splitL2, M.mapKeys succ afterR]
 
 take' :: (LowerBounded c, Enum c, Eq c) => c -> String' -> String' 
 take' n (String' s) = String' $ take'' n s
@@ -79,26 +87,6 @@ drop'' n s
     | n == lowerbound || s == "" = s 
     | otherwise = drop'' (pred n) (drop 1 s)
 
-lastRowAvailable :: (LowerBounded ri, Enum ri, Ord ri, LowerBounded ci, Enum ci, Eq ci) => Text ri ci -> ri 
-lastRowAvailable t = pred $ fromJust $ find (\i -> row i t == Nothing) [lowerbound..]
 
-flatten :: (LowerBounded ri, Enum ri, Ord ri, LowerBounded ci, Enum ci, Eq ci) => Text ri ci -> String 
-flatten t = init $ unlines $ map (string . fromJust . (flip row) t) [lowerbound..(lastRowAvailable t)]
-
-empty :: Text ri ci 
-empty = Empty 
-
-updateRow :: ri -> (String' -> String') -> Text ri ci -> Text ri ci 
-updateRow = UpdateRow
-
-merge :: ri -> Text ri ci -> Text ri ci
-merge = Merge
-
-split :: ri -> ci -> Text ri ci -> Text ri ci
-split = Split
-
-
-fromString :: (LowerBounded ri, Enum ri, LowerBounded ci) => String -> Text ri ci 
-fromString s = foldr ($) expanded [updateRow i (const l) | (i, l) <- zip [lowerbound..] singleStringLines]
-    where singleStringLines = map String' $ splitOn "\n" s
-          expanded = foldr ($) empty $ replicate (length singleStringLines - 1) (split lowerbound lowerbound)
+fromString :: (LowerBounded ri, Enum ri, Eq ri) => String -> Text ri ci 
+fromString s = Content $ M.fromAscList $ zip [lowerbound..] $ map String' $ splitOn "\n" s
