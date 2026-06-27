@@ -75,23 +75,30 @@ prop_edit_empty t =
     let (editedText, pos) = edit empty t in 
         editedText TE.==== t .&&. pos === Position 0 0
 
+rowLength :: Natural -> T.Text Natural Natural -> Natural
+rowLength row t = fromIntegral $ length $ string $ fromJust $ T.row row t 
+
 prop_edit_cursorUp :: Editing -> T.Text Natural Natural -> Property
 prop_edit_cursorUp e t = 
     let (resultText, pos) = edit e t 
         (editedText, newPos) = edit (cursor CUp e) t in 
-            editedText TE.==== resultText .&&. newPos === pos { row = row pos .- 1 }
+            editedText TE.==== resultText .&&. row newPos === (row pos .- 1) .&&. 
+            col newPos === min (col pos) (rowLength (row newPos) editedText)
 
 prop_edit_cursorDown :: Editing -> T.Text Natural Natural -> Property 
 prop_edit_cursorDown e t = 
     let (resultText, pos) = edit e t 
         (editedText, newPos) = edit (cursor CDown e) t in 
-            editedText TE.==== resultText .&&. newPos === pos { row = min (lastRowAvailable resultText) (row pos + 1) }
+            editedText TE.==== resultText .&&. 
+            row newPos === min (lastRowAvailable resultText) (row pos + 1) .&&.
+            col newPos === min (col pos) (rowLength (row newPos) editedText)
 
 prop_edit_cursorLeft :: Editing -> T.Text Natural Natural -> Property 
 prop_edit_cursorLeft e t = 
     let (resultText, pos) = edit e t 
         (editedText, newPos) = edit (cursor CLeft e) t in 
-            editedText TE.==== resultText .&&. newPos === pos { col = col pos .- 1 }
+            editedText TE.==== resultText .&&. 
+            newPos === pos { col = col pos .- 1 }
 
 prop_edit_cursorRight :: Editing -> T.Text Natural Natural -> Property
 prop_edit_cursorRight e t = 
@@ -122,6 +129,11 @@ prop_edit_resetCursor e t =
         (editedText, newPos) = edit (resetCursor e) t in 
             editedText TE.==== resultText .&&. newPos === Position 0 0
 
+prop_edit_within_text :: Editing -> T.Text Natural Natural -> Property 
+prop_edit_within_text e t = 
+    let (edited, pos) = edit e t in 
+        property (row pos <= lastRowAvailable edited) .&&. 
+        property (col pos <= (fromIntegral $ length $ string $ fromJust $ T.row (row pos) edited))
 
 type ForallTextProperty = T.Text Natural Natural -> Property
 (====) :: Editing -> Editing -> ForallTextProperty
@@ -165,6 +177,7 @@ spec = do
     prop "prop_edit_insert" prop_edit_insert
     prop "prop_edit_insert_newline" prop_edit_insert_newline
     prop "prop_edit_resetCursor" prop_edit_resetCursor
+    prop "prop_edit_within_text" prop_edit_within_text
     prop "prop_backspace_insert_id" prop_backspace_insert_id
     prop "prop_resetCursor_backspace" prop_resetCursor_backspace
     prop "prop_resetCursor_empty" prop_resetCursor_empty

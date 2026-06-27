@@ -12,7 +12,7 @@ module Editing
     ) where
 
 import Numeric.Natural (Natural)
-import Text (Text, LowerBounded, lowerbound, lastRowAvailable, string, split, updateRow, singleLineString, merge)
+import Text (Text, LowerBounded, lowerbound, lastRowAvailable, string, split, updateRow, singleLineString, merge, String')
 import qualified Text as T
 import Data.Maybe (fromJust)
 
@@ -136,15 +136,23 @@ n1 .- n2
     | n1 < n2 = 0 
     | otherwise = n1 - n2
 
+
+makeValidCol :: Natural -> String' -> Natural
+makeValidCol col s' = let s = string s' in min col $ fromIntegral $ length s
+
+makeValid :: Text Natural Natural -> Position -> Position 
+makeValid t (Position row col) = let onRow = min (lastRowAvailable t) row in 
+        Position onRow $ makeValidCol col (fromJust $ T.row onRow t)
+
 edit :: Editing -> Text Natural Natural -> (Text Natural Natural, Position)
 edit Empty t = (t, Position 0 0)
-edit (CursorUp e) t = let (text, pos) = edit e t in (text, pos { row = row pos .- 1 })
-edit (CursorDown e) t = let (text, pos) = edit e t in (text, pos { row = min (lastRowAvailable text) (row pos + 1) })
-edit (CursorLeft e) t = let (text, pos) = edit e t in (text, pos { col = col pos .- 1 })
+edit (CursorUp e) t = let (text, pos) = edit e t in (text, makeValid text $ pos { row = row pos .- 1 })
+edit (CursorDown e) t = let (text, pos) = edit e t in (text, makeValid text $ pos { row = min (lastRowAvailable text) (row pos + 1) })
+edit (CursorLeft e) t = let (text, pos) = edit e t in (text, makeValid text $ pos { col = col pos .- 1 })
 edit (CursorRight e) t = 
     let (text, pos) = edit e t 
         rowLength = fromIntegral $ length $ string $ fromJust $ T.row (row pos) text in 
-            (text, pos { col = min rowLength (col pos + 1)})
+            (text, makeValid text $ pos { col = min rowLength (col pos + 1)})
 edit (Insert '\n' e) t = let (text, pos) = edit e t in (split (row pos) (col pos) text, Position (row pos + 1) 0)
 edit (Insert c e) t = 
     let (text, pos) = edit e t in 
