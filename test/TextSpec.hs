@@ -13,6 +13,7 @@ import Data.Maybe (fromJust, isJust)
 import GHC.TypeLits (Nat)
 import GHC.Num.Natural (naturalZero)
 import Text (LowerBounded)
+import TextEq
 
 instance {-# INCOHERENT #-} Show (a -> b) where
   show _ = "<fn>"
@@ -72,10 +73,6 @@ controlledRowIndex t = do
 
 tEmpty :: Text Nat Nat 
 tEmpty = empty
-
-infix 4 ====
-(====) :: Text Nat Nat -> Text Nat Nat -> Property
-t1 ==== t2 = t1 ~= (lastRowAvailable t2, (flip row) t2)
 
 infix 4 ~=
 (~=) :: Text Nat Nat -> (Nat, Nat -> Maybe String') -> Property
