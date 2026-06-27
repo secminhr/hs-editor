@@ -116,16 +116,10 @@ data Position = Position
 
 data CursorMovement = CUp | CDown | CLeft | CRight deriving (Show)
 
-data Editing 
-    = Empty
-    | CursorUp Editing 
-    | CursorDown Editing 
-    | CursorLeft Editing 
-    | CursorRight Editing
-    | Insert Char Editing
-    | ResetCursor Editing
-    | Backspace Editing
-    deriving (Show)
+data Editing = Edit ((Text Natural Natural, Position) -> (Text Natural Natural, Position))
+
+instance {-# INCOHERENT #-} Show Editing where 
+    show _ = "<fn>"
 
 instance LowerBounded Natural where 
     lowerbound = 0
@@ -145,46 +139,51 @@ makeValid t (Position row col) = let onRow = min (lastRowAvailable t) row in
         Position onRow $ makeValidCol col (fromJust $ T.row onRow t)
 
 edit :: Editing -> Text Natural Natural -> (Text Natural Natural, Position)
-edit Empty t = (t, Position 0 0)
-edit (CursorUp e) t = let (text, pos) = edit e t in (text, makeValid text $ pos { row = row pos .- 1 })
-edit (CursorDown e) t = let (text, pos) = edit e t in (text, makeValid text $ pos { row = min (lastRowAvailable text) (row pos + 1) })
-edit (CursorLeft e) t = let (text, pos) = edit e t in (text, makeValid text $ pos { col = col pos .- 1 })
-edit (CursorRight e) t = 
-    let (text, pos) = edit e t 
-        rowLength = fromIntegral $ length $ string $ fromJust $ T.row (row pos) text in 
-            (text, makeValid text $ pos { col = min rowLength (col pos + 1)})
-edit (Insert '\n' e) t = let (text, pos) = edit e t in (split (row pos) (col pos) text, Position (row pos + 1) 0)
-edit (Insert c e) t = 
-    let (text, pos) = edit e t in 
-            (updateRow (row pos) (\content -> fromJust $ singleLineString $ insertion (col pos) (string content)) text, pos { col = col pos + 1 })
-    where insertion col s = take (fromIntegral col) s ++ [c] ++ drop (fromIntegral col) s
-edit (ResetCursor e) t = let (text, pos) = edit e t in (text, Position 0 0)
-edit (Backspace e) t = let (text, pos) = edit e t in 
-    case pos of 
-        Position 0 0 -> (text, pos)
-        Position row 0 -> let rowLengthBeforeMerge = fromIntegral $ length $ string $ fromJust $ T.row (row - 1) text in
-            (merge (row - 1) text, Position (row - 1) rowLengthBeforeMerge)
-        Position row col -> (updateRow row (\content -> fromJust $ singleLineString $ back (string content)) text, Position row (col - 1))
-            where back s = take (fromIntegral col - 1) s ++ drop (fromIntegral col) s 
-
+edit (Edit f) t = f (t, Position 0 0)
 
 insertString :: String -> Editing -> Editing 
 insertString s e = foldr ($) e (map insert $ reverse s)
 
 empty :: Editing 
-empty = Empty
+empty = Edit $ id
+
+
+mapSnd :: (a -> b) -> (c, a) -> (c, b)
+mapSnd f (c, a) = (c, f a)
+
+lift :: ((Text Natural Natural, Position) -> (Text Natural Natural, Position)) -> Editing -> Editing 
+lift f (Edit g) = Edit $ f . g
 
 cursor :: CursorMovement -> Editing -> Editing
-cursor CUp = CursorUp
-cursor CDown = CursorDown
-cursor CLeft = CursorLeft
-cursor CRight = CursorRight
+cursor CUp = lift (\(text, p) ->  (text, makeValid text p { row = row p .- 1 }))
+cursor CDown = lift (\(text, p) -> (text, makeValid text p { row = row p + 1 })) 
+cursor CLeft = lift (\(text, p) -> (text, makeValid text p { col = col p .- 1 }))
+cursor CRight = lift (\(text, p) -> (text, makeValid text p { col = col p + 1}))
 
 insert :: Char -> Editing -> Editing 
-insert = Insert
+insert '\n' = lift (\(text, p) -> (split (row p) (col p) text, Position (row p + 1) 0))
+insert c = lift (\(text, p) -> (updateRow (row p) (insertion (col p) c) text, p { col = col p + 1 }))
+    where 
+        insertion :: Natural -> Char -> String' -> String'
+        insertion col c s' = let s = string s' in 
+            fromJust $ singleLineString $ take (fromIntegral col) s ++ [c] ++ drop (fromIntegral col) s
+
 
 resetCursor :: Editing -> Editing 
-resetCursor = ResetCursor
+resetCursor = lift $ mapSnd (const $ Position 0 0)
 
 backspace :: Editing -> Editing
-backspace = Backspace
+backspace = lift (\(text, pos) -> 
+    case pos of 
+        Position 0 0 -> (text, pos)
+        Position row 0 -> 
+            (merge (row - 1) text, Position (row - 1) (fromJust $ rowLengthMaybe (row - 1) text))
+        Position row col -> (updateRow row (\content -> fromJust $ singleLineString $ back (string content)) text, Position row (col - 1))
+            where back s = take (fromIntegral col - 1) s ++ drop (fromIntegral col) s 
+    )
+
+
+rowLengthMaybe :: Natural -> Text Natural Natural -> Maybe Natural 
+rowLengthMaybe r t = do 
+    rowContent <- T.row r t
+    return $ fromIntegral $ length $ string $ rowContent
