@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       Editing
+      Editor
       Lib
       Text
       Viewport
