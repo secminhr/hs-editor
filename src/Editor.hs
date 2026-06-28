@@ -5,6 +5,7 @@ module Editor
     , newEditor
     , frame 
     , editedString
+    , editedText
     , upKey
     , downKey
     , leftKey
@@ -74,7 +75,10 @@ frame (Editor t e) vp size =
     , CursorPos (E.row absCursor ~- startingRow vp') (E.col absCursor ~- startingCol vp'))
 
 editedString :: Editor -> String 
-editedString (Editor t e) = flatten $ fst $ edit e t
+editedString e = flatten $ editedText e
+
+editedText :: Editor -> Text Natural Natural 
+editedText (Editor t e) = fst $ edit e t
 
 upKey :: Editor -> Editor 
 upKey (Editor t e) = Editor t (cursor CUp e)
