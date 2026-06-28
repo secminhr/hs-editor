@@ -12,7 +12,7 @@ import Brick.Types (Widget(..), BrickEvent, EventM, BrickEvent(VtyEvent), getCon
 import qualified Brick.Types as BT
 import Brick.Main (customMain, neverShowCursor, showFirstCursor, resizeOrQuit, App(App), lookupExtent, continueWithoutRedraw, halt)
 import Brick.AttrMap (forceAttrMap)
-import Graphics.Vty (outputIface)
+import Graphics.Vty (outputIface, Modifier (MCtrl))
 import qualified Graphics.Vty.CrossPlatform as V
 import Graphics.Vty.Config (defaultConfig)
 import Graphics.Vty.Attributes (defAttr)
@@ -22,6 +22,7 @@ import Control.Monad.IO.Class (liftIO)
 import Debug.Trace (traceM, trace, traceShowId, traceShowWith, traceShow)
 import Editor (newEditor)
 import Brick (Location(Location))
+import Editing (Editing)
 
 data AppState = AppState
     { _editor :: Editor
@@ -29,6 +30,7 @@ data AppState = AppState
     , _size :: Size
     , _text :: [Maybe String]
     , _cursorPos :: CursorPos
+    , _filename :: String
     }
 makeLenses ''AppState
 
@@ -45,12 +47,13 @@ main = do
     initialVty <- V.mkVty defaultConfig
     (termW, termH) <- displayBounds (outputIface initialVty)
 
-    let state = AppState (newEditor content) new (Size (fromIntegral termW) (fromIntegral termH)) (map Just $ lines content) (CursorPos 0 0)
+    let state = AppState (newEditor content) new (Size (fromIntegral termW) (fromIntegral termH)) (map Just $ lines content) (CursorPos 0 0) filename
+
     let app = App drawUI showFirstCursor handleEvent (return ()) (const $ forceAttrMap defAttr)
 
     final <- customMain initialVty (return initialVty) Nothing app state
     return ()
-    
+
 handleEvent :: BrickEvent Name () -> EventM Name AppState ()
 handleEvent (VtyEvent (EvKey KUp [])) = editor %= upKey >> updateStates
 handleEvent (VtyEvent (EvKey KDown [])) = editor %= downKey >> updateStates
@@ -59,6 +62,12 @@ handleEvent (VtyEvent (EvKey KLeft [])) = editor %= leftKey >> updateStates
 handleEvent (VtyEvent (EvKey KEnter [])) = editor %= enterKey >> updateStates
 handleEvent (VtyEvent (EvKey (KChar c) [])) = editor %= visibleInput c >> updateStates
 handleEvent (VtyEvent (EvKey KBS [])) = editor %= backspaceKey >> updateStates
+handleEvent (VtyEvent (EvKey (KChar 's') [MCtrl])) = do 
+    e <- use editor
+    f <- use filename
+    let t = editedString e
+    liftIO $ writeFile f t
+
 handleEvent _ = halt
 
 updateStates :: EventM Name AppState ()
@@ -80,7 +89,7 @@ drawUI :: AppState -> [Widget Name]
 drawUI s = [ drawEditor s ]
 
 drawEditor :: AppState -> Widget Name
-drawEditor (AppState _ vp _ text (CursorPos row col)) = reportExtent MainEditor $ B.showCursor MainEditorCursor (Location (fromIntegral col, fromIntegral row)) $ Widget BT.Greedy BT.Greedy $ do 
+drawEditor (AppState _ vp _ text (CursorPos row col) _) = reportExtent MainEditor $ B.showCursor MainEditorCursor (Location (fromIntegral col, fromIntegral row)) $ Widget BT.Greedy BT.Greedy $ do 
     render $ str $ unlines $ map (filter (/= '\n') . or "") text
     where or s ms = case ms of 
             Just string -> string 

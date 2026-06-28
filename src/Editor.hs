@@ -1,9 +1,10 @@
 module Editor 
     ( CursorPos(..)
     , Size(..)
-    , Editor
+    , Editor(..)
     , newEditor
     , frame 
+    , editedString
     , upKey
     , downKey
     , leftKey
@@ -17,7 +18,7 @@ import Editing (Editing, cursor, CursorMovement (..), Position, edit, insert, ba
 import qualified Editing as E
 import Viewport (Viewport, startingRow, startingCol, viewAt, scrollH, scrollV)
 import Numeric.Natural (Natural)
-import Text (Text, string, fromString)
+import Text (Text, string, fromString, flatten)
 import qualified Text as T
 
 data CursorPos = CursorPos
@@ -72,6 +73,9 @@ frame (Editor t e) vp size =
     , map ((take (fromIntegral $ w size) . drop (startingCol vp'). string) <$>) $ map (\r -> T.row (fromIntegral r) t') [startingRow vp' ..(startingRow vp' - 1 + fromIntegral (h size))]
     , CursorPos (E.row absCursor ~- startingRow vp') (E.col absCursor ~- startingCol vp'))
 
+editedString :: Editor -> String 
+editedString (Editor t e) = flatten $ fst $ edit e t
+
 upKey :: Editor -> Editor 
 upKey (Editor t e) = Editor t (cursor CUp e)
 
@@ -92,3 +96,4 @@ enterKey (Editor t e) = Editor t (insert '\n' e)
 
 backspaceKey :: Editor -> Editor 
 backspaceKey (Editor t e) = Editor t (backspace e)
+
