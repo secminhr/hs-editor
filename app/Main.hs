@@ -68,12 +68,12 @@ theMap = attrMap defAttr
     , (lineNoAttr, defAttr `withForeColor` yellow)
     ]
 
-maxRowNoWidth :: Text Natural Natural -> Int 
-maxRowNoWidth t = max 3 $ length (show $ 1 + lastRowAvailable t) 
+maxRowNoWidth :: Natural -> Int 
+maxRowNoWidth maxRowNo = max 3 $ length (show maxRowNo)  
 
 editorSize :: Int -> Int -> Natural -> Size
 editorSize termW termH maxRowNo = 
-    Size (fromIntegral termW - (fromIntegral (length $ show maxRowNo)) - 1) (fromIntegral termH - 3) 
+    Size (fromIntegral termW - fromIntegral (maxRowNoWidth maxRowNo) - 1) (fromIntegral termH - 3) 
 
 main :: IO ()
 main = do 
@@ -154,9 +154,9 @@ drawTabs (AppState selector) =
 
 drawLineNo :: TabState -> Widget Name 
 drawLineNo (TabState (Editor t _) vp (Size _ h) _ _ _ maxRowNo) = 
-    let rowNoWidth = length $ show maxRowNo
+    let rowNoWidth = maxRowNoWidth maxRowNo
         minDisplayRowNo = 1 + startingRow vp
-        maxDisplayRowNo = minDisplayRowNo + fromIntegral h in 
+        maxDisplayRowNo = min (fromIntegral maxRowNo) $ minDisplayRowNo + fromIntegral h in 
     withAttr lineNoAttr $ str $ unlines $ map (\no -> replicate (rowNoWidth - length no) ' ' ++ no) $ map show [minDisplayRowNo..maxDisplayRowNo]
 
 drawSplitter :: TabState -> Widget Name
