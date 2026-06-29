@@ -59,6 +59,13 @@ prop_selectedItem :: ItemSelector Int -> Property
 prop_selectedItem selector = 
     selectedItem selector === getItems selector NE.!! (fromIntegral $ selectedIndex selector)
 
+instance Show (Int -> Int) where 
+    show _ = "<Intfn>"
+
+prop_selectedItem_mapSelectedItem :: ItemSelector Int -> (Int -> Int) -> Property 
+prop_selectedItem_mapSelectedItem selector f = 
+    (selectedItem $ mapSelectedItem f selector) === (f $ selectedItem selector)
+
 spec :: Spec
 spec = do 
     prop "prop_getItems_newItemSelector" prop_getItems_newItemSelector
@@ -69,3 +76,4 @@ spec = do
     prop "prop_selectedIndex_setItems" prop_selectedIndex_setItems
     prop "prop_selectedIndex_always_lt_length" prop_selectedIndex_always_lt_length
     prop "prop_selectedItem" prop_selectedItem
+    prop "prop_selectedItem_mapSelectedItem" prop_selectedItem_mapSelectedItem

@@ -6,9 +6,10 @@ module ItemSelector
     , getItems
     , selectedItem
     , selectedIndex
+    , mapSelectedItem
     ) where 
 import Numeric.Natural (Natural)
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty (NonEmpty, fromList)
 import qualified Data.List.NonEmpty as NE
 
 data ItemSelector a = ItemSelector 
@@ -35,3 +36,9 @@ selectedItem s = getItems s NE.!! (fromIntegral $ selectedIndex s)
 
 selectedIndex :: ItemSelector a -> Natural
 selectedIndex = index
+
+mapSelectedItem :: (a -> a) -> ItemSelector a -> ItemSelector a
+mapSelectedItem f s = 
+    let newValue = f (selectedItem s) 
+        l = list s in 
+    setItems (fromList $ NE.take (fromIntegral $ selectedIndex s) l ++ [newValue] ++ NE.drop (fromIntegral $ selectedIndex s + 1) l) s
