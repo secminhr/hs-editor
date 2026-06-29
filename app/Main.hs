@@ -5,14 +5,14 @@ module Main (main) where
 import Lib
 import Viewport
 import Editor
-import Lens.Micro.Platform (makeLenses, (%=), (.=), use)
-import Brick.Widgets.Core (str, reportExtent, (<=>), vLimit, fill, (<+>))
+import Lens.Micro.Platform (makeLenses, (%=), (.=), use, Lens', lens)
+import Brick.Widgets.Core (str, reportExtent, (<=>), vLimit, fill, (<+>), hLimit)
 import qualified Brick.Widgets.Core as B
 import Brick.Types (Widget(..), BrickEvent, EventM, BrickEvent(VtyEvent), getContext, availWidth, availHeight, ViewportType(Horizontal), Extent(Extent))
 import qualified Brick.Types as BT
 import Brick.Main (customMain, neverShowCursor, showFirstCursor, resizeOrQuit, App(App), lookupExtent, continueWithoutRedraw, halt)
 import Brick.AttrMap (forceAttrMap, AttrMap)
-import Graphics.Vty (outputIface, Modifier (MCtrl), withBackColor, withForeColor, yellow)
+import Graphics.Vty (outputIface, Modifier (..), withBackColor, withForeColor, yellow)
 import qualified Graphics.Vty.CrossPlatform as V
 import Graphics.Vty.Config (defaultConfig)
 import Graphics.Vty.Attributes (defAttr, withStyle, reverseVideo)
@@ -21,13 +21,15 @@ import Graphics.Vty.Output (displayBounds)
 import Control.Monad.IO.Class (liftIO)
 import Debug.Trace (traceM, trace, traceShowId, traceShowWith, traceShow)
 import Editor (newEditor, editedString, editedText)
-import Brick (Location(Location), AttrName, attrName, attrMap, withAttr, getVtyHandle)
+import Brick (Location(Location), AttrName, attrName, attrMap, withAttr, getVtyHandle, withBorderStyle)
 import Editing (Editing)
 import Brick.Widgets.Border (border, hBorder, vBorder)
 import Text (Text, lastRowAvailable)
 import Numeric.Natural (Natural)
+import ItemSelector (ItemSelector, newItemSelector, selectedItem, mapSelectedItem, getItems, setItems, select, selectedIndex)
+import qualified Data.List.NonEmpty as NE
 
-data AppState = AppState
+data TabState = TabState 
     { _editor :: Editor
     , _viewport :: Viewport
     , _size :: Size
@@ -36,7 +38,18 @@ data AppState = AppState
     , _filename :: String
     , _maxRowNo :: Natural
     }
+
+data AppState = AppState
+    { _itemSelector :: ItemSelector TabState 
+    }
+
 makeLenses ''AppState
+makeLenses ''TabState
+
+currentTab :: Lens' AppState TabState
+currentTab = lens 
+    (selectedItem . _itemSelector) 
+    (\appState modT -> AppState $ mapSelectedItem (const modT) $ _itemSelector appState)
 
 data Name 
     = MainEditor
@@ -72,7 +85,8 @@ main = do
 
     let editor@(Editor t _) = newEditor content
     let maxRowNo = 1 + lastRowAvailable t
-    let state = AppState editor new (editorSize termW termH maxRowNo) (map Just $ lines content) (CursorPos 0 0) filename maxRowNo
+    let initTab = TabState editor new (editorSize termW termH maxRowNo) (map Just $ lines content) (CursorPos 0 0) filename maxRowNo
+    let state = AppState (newItemSelector (NE.singleton initTab))
 
     let app = App drawUI showFirstCursor handleEvent (return ()) (const $ theMap)
 
@@ -80,56 +94,77 @@ main = do
     return ()
 
 handleEvent :: BrickEvent Name () -> EventM Name AppState ()
-handleEvent (VtyEvent (EvKey KUp [])) = editor %= upKey >> updateStates
-handleEvent (VtyEvent (EvKey KDown [])) = editor %= downKey >> updateStates
-handleEvent (VtyEvent (EvKey KRight [])) = editor %= rightKey >> updateStates
-handleEvent (VtyEvent (EvKey KLeft [])) = editor %= leftKey >> updateStates
-handleEvent (VtyEvent (EvKey KEnter [])) = editor %= enterKey >> updateStates
-handleEvent (VtyEvent (EvKey (KChar c) [])) = editor %= visibleInput c >> updateStates
-handleEvent (VtyEvent (EvKey KBS [])) = editor %= backspaceKey >> updateStates
+handleEvent (VtyEvent (EvKey KUp [])) = (currentTab.editor %= upKey) >> updateStates
+handleEvent (VtyEvent (EvKey KDown [])) = (currentTab.editor %= downKey) >> updateStates
+handleEvent (VtyEvent (EvKey KRight [])) = (currentTab.editor %= rightKey) >> updateStates
+handleEvent (VtyEvent (EvKey KLeft [])) = (currentTab.editor %= leftKey) >> updateStates
+handleEvent (VtyEvent (EvKey KEnter [])) = (currentTab.editor %= enterKey) >> updateStates
+handleEvent (VtyEvent (EvKey (KChar c) [])) = (currentTab.editor %= visibleInput c) >> updateStates
+handleEvent (VtyEvent (EvKey KBS [])) = (currentTab.editor %= backspaceKey) >> updateStates
 handleEvent (VtyEvent (EvKey (KChar 's') [MCtrl])) = do 
-    e <- use editor
-    f <- use filename
+    e <- use (currentTab.editor)
+    f <- use (currentTab.filename)
     let t = editedString e
     liftIO $ writeFile f t
+handleEvent (VtyEvent (EvKey (KChar 'n') [MCtrl])) = do 
+    selector <- use itemSelector
+    vty <- getVtyHandle
+    (termW, termH) <- liftIO $ displayBounds (outputIface vty)
+    let content = " "
+    let newItems = NE.append (getItems selector) $ 
+                    NE.singleton $ TabState (newEditor content) new (editorSize termW termH 1) (map Just $ lines content) (CursorPos 0 0) "Untitled" 1
+    itemSelector %= select (length newItems - 1) . setItems newItems
 
+handleEvent (VtyEvent (EvKey KBackTab [])) = itemSelector %= (\selector -> select (fromIntegral $ 1 + selectedIndex selector) selector)
 handleEvent _ = halt
 
 updateStates :: EventM Name AppState ()
 updateStates = do 
-    editorState <- use editor 
-    vpState <- use viewport 
-    sizeState <- use size
+    editorState <- use (currentTab.editor)
+    vpState <- use (currentTab.viewport)
+    sizeState <- use (currentTab.size)
     let (vp', t', cursorPos') = frame editorState vpState sizeState 
-    viewport .= vp' 
-    text .= t' 
-    cursorPos .= cursorPos'
+    currentTab.viewport .= vp' 
+    currentTab.text .= t' 
+    currentTab.cursorPos .= cursorPos'
     let newMaxRowNo = 1 + lastRowAvailable (editedText editorState)
-    maxRowNo .= newMaxRowNo
+    currentTab.maxRowNo .= newMaxRowNo
     
     vty <- getVtyHandle
     (termW, termH) <- liftIO $ displayBounds (outputIface vty)
-    size .= editorSize termW termH newMaxRowNo
+    currentTab.size .= editorSize termW termH newMaxRowNo
 
 drawUI :: AppState -> [Widget Name]
-drawUI s = [ 
-    ((border (str (" " ++ _filename s ++ " "))) <+> (hBorder <=> str " " <=> hBorder)) <=>
+drawUI appState = let s = selectedItem (_itemSelector appState) in [ 
+    drawTabs appState <=>
     (drawLineNo s <+> drawSplitter s <+> drawEditor s)
     ]
 
-drawLineNo :: AppState -> Widget Name 
-drawLineNo (AppState (Editor t _) vp (Size _ h) _ _ _ maxRowNo) = 
+drawTabs :: AppState -> Widget Name 
+drawTabs (AppState selector) = 
+    (foldr1 (<+>) $ 
+        NE.map (\(index, s) -> 
+            let tabName = " " ++ _filename s ++ " "
+                strWidget = str tabName
+                tabNameLength = length tabName in 
+                if index == selectedIndex selector then border strWidget 
+                else hLimit tabNameLength $ (hBorder <=> strWidget <=> hBorder)
+        ) $ NE.zip (NE.fromList [0..]) $ getItems selector) <+> 
+    (hBorder <=> str " " <=> hBorder)
+
+drawLineNo :: TabState -> Widget Name 
+drawLineNo (TabState (Editor t _) vp (Size _ h) _ _ _ maxRowNo) = 
     let rowNoWidth = length $ show maxRowNo
         minDisplayRowNo = 1 + startingRow vp
         maxDisplayRowNo = minDisplayRowNo + fromIntegral h in 
     withAttr lineNoAttr $ str $ unlines $ map (\no -> replicate (rowNoWidth - length no) ' ' ++ no) $ map show [minDisplayRowNo..maxDisplayRowNo]
 
-drawSplitter :: AppState -> Widget Name
+drawSplitter :: TabState -> Widget Name
 drawSplitter s = 
     str $ unlines $ replicate (fromIntegral (h (_size s))) " "
 
-drawEditor :: AppState -> Widget Name
-drawEditor (AppState _ vp _ text (CursorPos row col) _ _) = reportExtent MainEditor $ B.showCursor MainEditorCursor (Location (fromIntegral col, fromIntegral row)) $ Widget BT.Greedy BT.Greedy $ do 
+drawEditor :: TabState -> Widget Name
+drawEditor (TabState _ vp _ text (CursorPos row col) _ _) = reportExtent MainEditor $ B.showCursor MainEditorCursor (Location (fromIntegral col, fromIntegral row)) $ Widget BT.Greedy BT.Greedy $ do 
     render $ str $ unlines $ map (filter (/= '\n') . or "") text
     where or s ms = case ms of 
             Just string -> string 
