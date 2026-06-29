@@ -27,6 +27,7 @@ library
   exposed-modules:
       Editing
       Editor
+      ItemSelector
       Lib
       Text
       Viewport
@@ -68,6 +69,7 @@ test-suite hs-editor-test
   main-is: Spec.hs
   other-modules:
       EditingSpec
+      ItemSelectorSpec
       TextEq
       TextSpec
       ViewportSpec
