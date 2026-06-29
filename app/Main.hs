@@ -35,9 +35,13 @@ data TabState = TabState
     , _size :: Size
     , _text :: [Maybe String]
     , _cursorPos :: CursorPos
-    , _filename :: String
+    , _tabType :: TabType
     , _maxRowNo :: Natural
     }
+
+data TabType 
+    = File String 
+    | TmpBuffer
 
 data AppState = AppState
     { _itemSelector :: ItemSelector TabState 
@@ -85,7 +89,7 @@ main = do
 
     let editor@(Editor t _) = newEditor content
     let maxRowNo = 1 + lastRowAvailable t
-    let initTab = TabState editor new (editorSize termW termH maxRowNo) (map Just $ lines content) (CursorPos 0 0) filename maxRowNo
+    let initTab = TabState editor new (editorSize termW termH maxRowNo) (map Just $ lines content) (CursorPos 0 0) (File filename) maxRowNo
     let state = AppState (newItemSelector (NE.singleton initTab))
 
     let app = App drawUI showFirstCursor handleEvent (return ()) (const $ theMap)
@@ -103,16 +107,18 @@ handleEvent (VtyEvent (EvKey (KChar c) [])) = (currentTab.editor %= visibleInput
 handleEvent (VtyEvent (EvKey KBS [])) = (currentTab.editor %= backspaceKey) >> updateStates
 handleEvent (VtyEvent (EvKey (KChar 's') [MCtrl])) = do 
     e <- use (currentTab.editor)
-    f <- use (currentTab.filename)
-    let t = editedString e
-    liftIO $ writeFile f t
+    tabType <- use (currentTab.tabType)
+    case tabType of 
+        File filename -> liftIO $ writeFile filename $ editedString e
+        _ -> halt
+
 handleEvent (VtyEvent (EvKey (KChar 'n') [MCtrl])) = do 
     selector <- use itemSelector
     vty <- getVtyHandle
     (termW, termH) <- liftIO $ displayBounds (outputIface vty)
     let content = " "
     let newItems = NE.append (getItems selector) $ 
-                    NE.singleton $ TabState (newEditor content) new (editorSize termW termH 1) (map Just $ lines content) (CursorPos 0 0) "Untitled" 1
+                    NE.singleton $ TabState (newEditor content) new (editorSize termW termH 1) (map Just $ lines content) (CursorPos 0 0) TmpBuffer 1
     itemSelector %= select (length newItems - 1) . setItems newItems
 
 handleEvent (VtyEvent (EvKey KBackTab [])) = itemSelector %= (\selector -> select (fromIntegral $ 1 + selectedIndex selector) selector)
@@ -144,7 +150,9 @@ drawTabs :: AppState -> Widget Name
 drawTabs (AppState selector) = 
     (foldr1 (<+>) $ 
         NE.map (\(index, s) -> 
-            let tabName = " " ++ _filename s ++ " "
+            let tabName = " " ++ (case _tabType s of 
+                                    File filename -> filename
+                                    _ -> "Untitled") ++ " "
                 strWidget = str tabName
                 tabNameLength = length tabName in 
                 if index == selectedIndex selector then border strWidget 
