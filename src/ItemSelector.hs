@@ -11,30 +11,27 @@ import Numeric.Natural (Natural)
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 
-data ItemSelector a
-    = NewItemSelector (NonEmpty a)
-    | Select Int (ItemSelector a)
-    | SetItems (NonEmpty a) (ItemSelector a)
+data ItemSelector a = ItemSelector 
+    { index :: Natural
+    , list :: NonEmpty a }
     deriving (Show)
 
 newItemSelector :: NonEmpty a -> ItemSelector a 
-newItemSelector = NewItemSelector
+newItemSelector = ItemSelector 0
 
 select :: Int -> ItemSelector a -> ItemSelector a
-select = Select
+select pos s@(ItemSelector _ oldList) = s { 
+    index = let l = length oldList in fromIntegral $ (l + pos `rem` l) `rem` l 
+    }
 
 setItems :: NonEmpty a -> ItemSelector a -> ItemSelector a
-setItems = SetItems
+setItems l (ItemSelector oldIndex _) = ItemSelector (oldIndex `rem` (fromIntegral $ length l)) l
 
 getItems :: ItemSelector a -> NonEmpty a 
-getItems (NewItemSelector l) = l 
-getItems (Select _ s) = getItems s 
-getItems (SetItems l _) = l
+getItems = list
 
 selectedItem :: ItemSelector a -> a
 selectedItem s = getItems s NE.!! (fromIntegral $ selectedIndex s)
 
 selectedIndex :: ItemSelector a -> Natural
-selectedIndex (NewItemSelector _) = 0
-selectedIndex (Select pos list) = let l = length (getItems list) in fromIntegral $ (l + pos `rem` l) `rem` l 
-selectedIndex (SetItems l s) = let oldIndex = selectedIndex s in oldIndex `rem` (fromIntegral $ length l)
+selectedIndex = index
