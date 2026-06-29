@@ -15,8 +15,10 @@ module Editor
     , backspaceKey
     ) where 
 
-import Editing (Editing, cursor, CursorMovement (..), Position, edit, insert, backspace)
+import Editing (Editing, cursor, CursorMovement (..), edit, insert, backspace)
 import qualified Editing as E
+import AbsCursorPos (Position)
+import qualified AbsCursorPos as ACP
 import Viewport (Viewport, startingRow, startingCol, viewAt, scrollH, scrollV)
 import Numeric.Natural (Natural)
 import Text (Text, string, fromString, flatten)
@@ -63,7 +65,7 @@ makeVisibleH absCol w vp
 
 makeVisible :: Position -> Size -> Viewport -> Viewport
 makeVisible absCursor size vp = 
-    makeVisibleV (E.row absCursor) (h size) $ makeVisibleH (E.col absCursor) (w size) vp
+    makeVisibleV (ACP.row absCursor) (h size) $ makeVisibleH (ACP.col absCursor) (w size) vp
 
 
 frame :: Editor -> Viewport -> Size -> (Viewport, [Maybe String], CursorPos)
@@ -72,7 +74,7 @@ frame (Editor t e) vp size =
         vp' = makeVisible absCursor size vp in 
     ( vp'
     , map ((take (fromIntegral $ w size) . drop (startingCol vp'). string) <$>) $ map (\r -> T.row (fromIntegral r) t') [startingRow vp' ..(startingRow vp' - 1 + fromIntegral (h size))]
-    , CursorPos (E.row absCursor ~- startingRow vp') (E.col absCursor ~- startingCol vp'))
+    , CursorPos (ACP.row absCursor ~- startingRow vp') (ACP.col absCursor ~- startingCol vp'))
 
 editedString :: Editor -> String 
 editedString e = flatten $ editedText e

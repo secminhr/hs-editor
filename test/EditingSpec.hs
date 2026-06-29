@@ -12,6 +12,7 @@ import Text (lastRowAvailable, string, updateRow, singleLineString, split)
 import Data.Maybe (fromJust)
 import qualified TextEq as TE
 import Data.List (intercalate)
+import AbsCursorPos
 
 ---- saturating minus on natural
 infix 4 .-

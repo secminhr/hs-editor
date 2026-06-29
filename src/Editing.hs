@@ -1,6 +1,5 @@
 module Editing
-    ( Position(..)
-    , CursorMovement(..)
+    ( CursorMovement(..)
     , Editing
     , edit
     , empty
@@ -15,11 +14,7 @@ import Numeric.Natural (Natural)
 import Text (Text, LowerBounded, lowerbound, lastRowAvailable, string, split, updateRow, singleLineString, merge, String')
 import qualified Text as T
 import Data.Maybe (fromJust)
-
-data Position = Position 
-    { row :: Natural 
-    , col :: Natural }
-    deriving (Eq, Show)
+import AbsCursorPos (Position(..))
 
 data CursorMovement = CUp | CDown | CLeft | CRight deriving (Show)
 data Editing 

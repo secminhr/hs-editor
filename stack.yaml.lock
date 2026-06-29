@@ -3,7 +3,14 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/topics/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: integer-types-0.1.4.1@sha256:4b56a906d054c41ac64578f46435947e11a69314b831c74543384da8e7061502,2254
+    pantry-tree:
+      sha256: 24ac844ce94b5844c1ef102d54ef4b28aab0b8156bf5e747ce32d172eb1fec97
+      size: 2112
+  original:
+    hackage: integer-types-0.1.4.1
 snapshots:
 - completed:
     sha256: 4b787f53036611a03edbf438dd5412daa03fb3da5d938ae8865ec471fe3f9632
