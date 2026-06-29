@@ -148,17 +148,27 @@ drawUI appState = let s = selectedItem (_itemSelector appState) in [
 
 drawTabs :: AppState -> Widget Name 
 drawTabs (AppState selector) = 
-    (foldr1 (<+>) $ 
-        NE.map (\(index, s) -> 
-            let tabName = " " ++ (case _tabType s of 
-                                    File filename -> filename
-                                    _ -> "Untitled") ++ " "
-                strWidget = str tabName
-                tabNameLength = length tabName in 
-                if index == selectedIndex selector then border strWidget 
-                else hLimit tabNameLength $ (hBorder <=> strWidget <=> hBorder)
-        ) $ NE.zip (NE.fromList [0..]) $ getItems selector) <+> 
-    (hBorder <=> str " " <=> hBorder)
+    (foldr1 (<+>) $ NE.map (uncurry drawTab) $ 
+        NE.zip (getItems selector) (NE.map (== selectedIndex selector) $ NE.fromList [0..]))
+    <+> (hBorder <=> str " " <=> hBorder)
+
+drawTab :: TabState -> Bool -> Widget Name 
+drawTab ts selected = (if selected then drawSelectedTab else drawUnselectedTab) (tabLabel ts)
+    where tabLabel ts = case _tabType ts of 
+                            File filename -> filename 
+                            TmpBuffer -> "Untitled"
+
+drawSelectedTab :: String -> Widget Name
+drawSelectedTab tabLabel = 
+    let tabName = " " ++ tabLabel ++ " " in border $ str tabName 
+
+drawUnselectedTab :: String -> Widget Name 
+drawUnselectedTab tabLabel = 
+    let tabName = " " ++ tabLabel ++ " "
+        strWidget = str tabName
+        tabNameLength = length tabName in 
+        hLimit tabNameLength $ (hBorder <=> strWidget <=> hBorder) 
+
 
 drawLineNo :: TabState -> Widget Name 
 drawLineNo (TabState (Editor t _) vp (Size _ h) _ _ _ maxRowNo) = 
