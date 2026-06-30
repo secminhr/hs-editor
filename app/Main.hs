@@ -32,7 +32,7 @@ import Integer.Natural (Natural, addOne)
 import Integer.Positive (increase, subtractOne)
 import Data.Maybe (fromJust)
 import StatusLine (StatusLineState, newStatusLineState, renderStatusLine, handleStatusLineEvent, _editing, message, editing)
-import Data.List (find)
+import Data.List (find, findIndex)
 
 data TabState = TabState 
     { _editor :: Editor
@@ -53,10 +53,15 @@ data Name
     | StatusLine
     deriving (Eq, Ord, Show)
 
+selectItem :: (Eq a) => a -> ItemSelector a -> ItemSelector a 
+selectItem item selector = case findIndex (== item) (NE.toList (getItems selector)) of 
+                                Nothing -> selector 
+                                Just i -> select i selector
+
 data AppState = AppState
     { _itemSelector :: ItemSelector TabState 
     , _statusLineState :: StatusLineState Name
-    , _focus :: Name 
+    , _focusSelector :: ItemSelector Name
     }
 
 makeLenses ''AppState
@@ -96,8 +101,8 @@ vtyDisplayBounds vty = do
     return (positiveTermW, positiveTermH)
 
 showFocused :: AppState -> [CursorLocation Name] -> Maybe (CursorLocation Name)
-showFocused (AppState _ _ focus) = find (\loc -> case cursorLocationName loc of 
-                                            Just n -> n == focus 
+showFocused (AppState _ _ fSelector) = find (\loc -> case cursorLocationName loc of 
+                                            Just n -> n == selectedItem fSelector 
                                             Nothing -> False)
 
 main :: IO ()
@@ -112,7 +117,7 @@ main = do
     let (initT, initCursorPos) = frame editor
 
     let initTab = TabState editor initT initCursorPos (File filename)
-    let state = AppState (newItemSelector (NE.singleton initTab)) (newStatusLineState StatusLine) MainEditor
+    let state = AppState (newItemSelector (NE.singleton initTab)) (newStatusLineState StatusLine) (newItemSelector (MainEditor NE.:| [StatusLine]))
 
     let app = App drawUI showFocused handleEvent (return ()) (const $ theMap)
 
@@ -121,8 +126,8 @@ main = do
 
 handleEvent :: BrickEvent Name () -> EventM Name AppState ()
 handleEvent e = do 
-    focusedName <- use focus 
-    case focusedName of 
+    fSelector <- use focusSelector  
+    case selectedItem fSelector of 
         MainEditor -> handleMainEditorEvent e 
         StatusLine -> do 
             status <- use statusLineState
@@ -130,7 +135,7 @@ handleEvent e = do
             statusLineState .= newStatusLine
             if _editing newStatusLine then return ()
             else do 
-                focus .= MainEditor
+                focusSelector %= selectItem MainEditor 
                 case input of 
                     Nothing -> statusLineState.message .= "Canceled"
                     Just filename -> do 
@@ -153,7 +158,7 @@ handleMainEditorEvent (VtyEvent (EvKey (KChar 's') [MCtrl])) = do
     case tabType of 
         File filename -> liftIO $ writeFile filename $ editedString e
         _ -> do 
-            focus .= StatusLine 
+            focusSelector %= selectItem StatusLine
             statusLineState.message .= "Save to: "
             statusLineState.editing .= True
 
