@@ -129,7 +129,7 @@ handleEvent (VtyEvent (EvKey (KChar 'n') [MCtrl])) = do
     (termW, termH) <- liftIO $ vtyDisplayBounds vty
 
 
-    let content = " "
+    let content = ""
     let newItems = NE.append (getItems selector) $ 
                     NE.singleton $ TabState (newEditor content) (new (editorSize termW termH 1) (Padding 0 0)) (map Just $ lines content) (CursorPos 0 0) TmpBuffer 1
     itemSelector %= select (length newItems - 1) . setItems newItems
