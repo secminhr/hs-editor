@@ -115,7 +115,7 @@ main = do
     initialVty <- V.mkVty defaultConfig
     (termW, termH) <- vtyDisplayBounds initialVty
 
-    let editor = newEditor content (new (editorSize termW termH (maxRowNo editor)) (Padding 0 0))
+    let editor = newEditor content (new (editorSize termW termH (maxRowNo editor)) (Padding 0 0)) (fromJust . fromInt . textWidth) 
     let (initT, initCursorPos) = frame editor
 
     let initTab = TabState editor initT initCursorPos (File filename)
@@ -173,7 +173,7 @@ handleMainEditorEvent (VtyEvent (EvKey (KChar 'n') [MCtrl])) = do
 
     let content = ""
     let newItems = NE.append (getItems selector) $ 
-                    NE.singleton $ TabState (newEditor content (new (editorSize termW termH 1) (Padding 0 0))) (map Just $ lines content) (CursorPos 0 0) TmpBuffer
+                    NE.singleton $ TabState (newEditor content (new (editorSize termW termH 1) (Padding 0 0)) (fromJust . fromInt . textWidth)) (map Just $ lines content) (CursorPos 0 0) TmpBuffer
     itemSelector %= select (length newItems - 1) . setItems newItems
 
 handleMainEditorEvent (VtyEvent (EvKey KBackTab [])) = itemSelector %= (\selector -> select (1 + fromIntegral (selectedIndex selector)) selector)
@@ -232,7 +232,7 @@ drawUnselectedTab tabLabel =
 
 
 drawLineNo :: TabState -> Widget Name 
-drawLineNo (TabState e@(Editor t _ vp) _ _ _) = 
+drawLineNo (TabState e@(Editor t _ vp _) _ _ _) = 
     let rowNoWidth = maxRowNoWidth $ maxRowNo e
         minDisplayRowNo = addOne $ startingRow vp
         maxDisplayRowNo = min (maxRowNo e) $ increase (subtractOne (h (size vp))) minDisplayRowNo in 
