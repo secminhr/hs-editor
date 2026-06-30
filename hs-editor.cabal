@@ -44,11 +44,13 @@ library
     , containers
     , integer-types
     , split
+    , text
   default-language: Haskell2010
 
 executable hs-editor-exe
   main-is: Main.hs
   other-modules:
+      StatusLine
       Paths_hs_editor
   autogen-modules:
       Paths_hs_editor
@@ -63,6 +65,7 @@ executable hs-editor-exe
     , integer-types
     , microlens-platform
     , split
+    , text
     , vty >=6.0
     , vty-crossplatform
   default-language: Haskell2010
@@ -92,4 +95,5 @@ test-suite hs-editor-test
     , integer-types
     , quickcheck-instances
     , split
+    , text
   default-language: Haskell2010

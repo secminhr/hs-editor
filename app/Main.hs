@@ -21,7 +21,7 @@ import Graphics.Vty.Output (displayBounds)
 import Control.Monad.IO.Class (liftIO)
 import Debug.Trace (traceM, trace, traceShowId, traceShowWith, traceShow)
 import Editor (newEditor, editedString, editedText)
-import Brick (Location(Location), AttrName, attrName, attrMap, withAttr, getVtyHandle, withBorderStyle)
+import Brick (Location(Location), AttrName, attrName, attrMap, withAttr, getVtyHandle, withBorderStyle, CursorLocation, cursorLocationName, nestEventM)
 import Editing (Editing)
 import Brick.Widgets.Border (border, hBorder, vBorder)
 import Text (Text, lastRowAvailable)
@@ -31,6 +31,8 @@ import Integer (Positive, fromInt)
 import Integer.Natural (Natural, addOne)
 import Integer.Positive (increase, subtractOne)
 import Data.Maybe (fromJust)
+import StatusLine (StatusLineState, newStatusLineState, renderStatusLine, handleStatusLineEvent, _editing, message, editing)
+import Data.List (find)
 
 data TabState = TabState 
     { _editor :: Editor
@@ -46,8 +48,15 @@ data TabType
     = File String 
     | TmpBuffer
 
+data Name 
+    = MainEditor
+    | StatusLine
+    deriving (Eq, Ord, Show)
+
 data AppState = AppState
     { _itemSelector :: ItemSelector TabState 
+    , _statusLineState :: StatusLineState Name
+    , _focus :: Name 
     }
 
 makeLenses ''AppState
@@ -56,12 +65,7 @@ makeLenses ''TabState
 currentTab :: Lens' AppState TabState
 currentTab = lens 
     (selectedItem . _itemSelector) 
-    (\appState modT -> AppState $ mapSelectedItem (const modT) $ _itemSelector appState)
-
-data Name 
-    = MainEditor
-    | MainEditorCursor
-    deriving (Eq, Ord, Show)
+    (\appState modT -> appState { _itemSelector = mapSelectedItem (const modT) $ _itemSelector appState })
 
 reverseAttr :: AttrName
 reverseAttr = attrName "reverseText"
@@ -81,7 +85,7 @@ maxRowNoWidth maxRowNo = fromJust $ fromInt $ max 3 $ length (show maxRowNo)
 -- intended underflow, indicating a valid editor can't be created
 editorSize :: Positive -> Positive -> Positive -> Size
 editorSize termW termH maxRowNo = 
-    Size (termW - (maxRowNoWidth maxRowNo) - 1) (termH - 3) 
+    Size (termW - (maxRowNoWidth maxRowNo) - 1) (termH - 4) 
 
 vtyDisplayBounds :: Vty -> IO (Positive, Positive)
 vtyDisplayBounds vty = do 
@@ -90,6 +94,11 @@ vtyDisplayBounds vty = do
     let positiveTermH = fromJust $ fromInt termH
     
     return (positiveTermW, positiveTermH)
+
+showFocused :: AppState -> [CursorLocation Name] -> Maybe (CursorLocation Name)
+showFocused (AppState _ _ focus) = find (\loc -> case cursorLocationName loc of 
+                                            Just n -> n == focus 
+                                            Nothing -> False)
 
 main :: IO ()
 main = do 
@@ -105,27 +114,50 @@ main = do
     let initTab = TabState editor initT initCursorPos (File filename)
     let state = AppState (newItemSelector (NE.singleton initTab)) (newStatusLineState StatusLine) MainEditor
 
-    let app = App drawUI showFirstCursor handleEvent (return ()) (const $ theMap)
+    let app = App drawUI showFocused handleEvent (return ()) (const $ theMap)
 
     final <- customMain initialVty (return initialVty) Nothing app state
     return ()
 
 handleEvent :: BrickEvent Name () -> EventM Name AppState ()
-handleEvent (VtyEvent (EvKey KUp [])) = (currentTab.editor %= upKey) >> updateStates
-handleEvent (VtyEvent (EvKey KDown [])) = (currentTab.editor %= downKey) >> updateStates
-handleEvent (VtyEvent (EvKey KRight [])) = (currentTab.editor %= rightKey) >> updateStates
-handleEvent (VtyEvent (EvKey KLeft [])) = (currentTab.editor %= leftKey) >> updateStates
-handleEvent (VtyEvent (EvKey KEnter [])) = (currentTab.editor %= enterKey) >> updateStates
-handleEvent (VtyEvent (EvKey (KChar c) [])) = (currentTab.editor %= visibleInput c) >> updateStates
-handleEvent (VtyEvent (EvKey KBS [])) = (currentTab.editor %= backspaceKey) >> updateStates
-handleEvent (VtyEvent (EvKey (KChar 's') [MCtrl])) = do 
+handleEvent e = do 
+    focusedName <- use focus 
+    case focusedName of 
+        MainEditor -> handleMainEditorEvent e 
+        StatusLine -> do 
+            status <- use statusLineState
+            (newStatusLine, input) <- nestEventM status (handleStatusLineEvent e)
+            statusLineState .= newStatusLine
+            if _editing newStatusLine then return ()
+            else do 
+                focus .= MainEditor
+                case input of 
+                    Nothing -> statusLineState.message .= "Canceled"
+                    Just filename -> do 
+                        e <- use (currentTab.editor)
+                        liftIO $ writeFile filename $ editedString e
+                        currentTab.tabType .= File filename
+
+
+handleMainEditorEvent :: BrickEvent Name () -> EventM Name AppState ()
+handleMainEditorEvent (VtyEvent (EvKey KUp [])) = (currentTab.editor %= upKey) >> updateStates
+handleMainEditorEvent (VtyEvent (EvKey KDown [])) = (currentTab.editor %= downKey) >> updateStates
+handleMainEditorEvent (VtyEvent (EvKey KRight [])) = (currentTab.editor %= rightKey) >> updateStates
+handleMainEditorEvent (VtyEvent (EvKey KLeft [])) = (currentTab.editor %= leftKey) >> updateStates
+handleMainEditorEvent (VtyEvent (EvKey KEnter [])) = (currentTab.editor %= enterKey) >> updateStates
+handleMainEditorEvent (VtyEvent (EvKey (KChar c) [])) = (currentTab.editor %= visibleInput c) >> updateStates
+handleMainEditorEvent (VtyEvent (EvKey KBS [])) = (currentTab.editor %= backspaceKey) >> updateStates
+handleMainEditorEvent (VtyEvent (EvKey (KChar 's') [MCtrl])) = do 
     e <- use (currentTab.editor)
     tabType <- use (currentTab.tabType)
     case tabType of 
         File filename -> liftIO $ writeFile filename $ editedString e
-        _ -> halt
+        _ -> do 
+            focus .= StatusLine 
+            statusLineState.message .= "Save to: "
+            statusLineState.editing .= True
 
-handleEvent (VtyEvent (EvKey (KChar 'n') [MCtrl])) = do 
+handleMainEditorEvent (VtyEvent (EvKey (KChar 'n') [MCtrl])) = do 
     selector <- use itemSelector
     vty <- getVtyHandle
     (termW, termH) <- liftIO $ vtyDisplayBounds vty
@@ -136,8 +168,8 @@ handleEvent (VtyEvent (EvKey (KChar 'n') [MCtrl])) = do
                     NE.singleton $ TabState (newEditor content (new (editorSize termW termH 1) (Padding 0 0))) (map Just $ lines content) (CursorPos 0 0) TmpBuffer
     itemSelector %= select (length newItems - 1) . setItems newItems
 
-handleEvent (VtyEvent (EvKey KBackTab [])) = itemSelector %= (\selector -> select (1 + fromIntegral (selectedIndex selector)) selector)
-handleEvent _ = halt
+handleMainEditorEvent (VtyEvent (EvKey KBackTab [])) = itemSelector %= (\selector -> select (1 + fromIntegral (selectedIndex selector)) selector)
+handleMainEditorEvent _ = halt
 
 updateStates :: EventM Name AppState ()
 updateStates = do 
@@ -154,12 +186,13 @@ updateStates = do
 
 drawUI :: AppState -> [Widget Name]
 drawUI appState = let s = selectedItem (_itemSelector appState) in [ 
-    drawTabs appState <=>
-    (drawLineNo s <+> drawSplitter s <+> drawEditor s)
+    drawTabs appState 
+    <=> (drawLineNo s <+> drawSplitter s <+> drawEditor s)
+    <=> renderStatusLine (_statusLineState appState)
     ]
 
 drawTabs :: AppState -> Widget Name 
-drawTabs (AppState selector) = 
+drawTabs (AppState selector _ _) = 
     (foldr1 (<+>) $ NE.map (uncurry drawTab) $ 
         NE.zip (getItems selector) (NE.map (== selectedIndex selector) $ NE.fromList [0..]))
     <+> (hBorder <=> str " " <=> hBorder)
@@ -194,9 +227,8 @@ drawSplitter s =
     str $ unlines $ replicate (fromIntegral (h (size (viewport (_editor s))))) " "
 
 drawEditor :: TabState -> Widget Name
-drawEditor (TabState _ text (CursorPos row col) _) = reportExtent MainEditor $ B.showCursor MainEditorCursor (Location (fromIntegral col, fromIntegral row)) $ Widget BT.Greedy BT.Greedy $ do 
+drawEditor (TabState _ text (CursorPos row col) _) = reportExtent MainEditor $ B.showCursor MainEditor (Location (fromIntegral col, fromIntegral row)) $ Widget BT.Greedy BT.Greedy $ do 
     render $ str $ unlines $ map (filter (/= '\n') . or "") text
     where or s ms = case ms of 
             Just string -> string 
             Nothing -> s
-    
