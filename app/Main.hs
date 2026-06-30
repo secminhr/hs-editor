@@ -142,6 +142,7 @@ handleEvent e = do
                         e <- use (currentTab.editor)
                         liftIO $ writeFile filename $ editedString e
                         currentTab.tabType .= File filename
+                        statusLineState.message .= "Saved to " ++ filename
 
 
 handleMainEditorEvent :: BrickEvent Name () -> EventM Name AppState ()
