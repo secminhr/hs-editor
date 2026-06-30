@@ -30,6 +30,7 @@ library
       Editor
       ItemSelector
       Lib
+      SizedViewport
       Text
       Viewport
   other-modules:
@@ -73,6 +74,7 @@ test-suite hs-editor-test
   other-modules:
       EditingSpec
       ItemSelectorSpec
+      SizedViewportSpec
       TextEq
       TextSpec
       ViewportSpec
