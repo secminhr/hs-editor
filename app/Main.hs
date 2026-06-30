@@ -29,7 +29,7 @@ import ItemSelector (ItemSelector, newItemSelector, selectedItem, mapSelectedIte
 import qualified Data.List.NonEmpty as NE
 import Integer (Positive, fromInt)
 import Integer.Natural (Natural, addOne)
-import Integer.Positive (increase)
+import Integer.Positive (increase, subtractOne)
 import Data.Maybe (fromJust)
 
 data TabState = TabState 
@@ -184,7 +184,7 @@ drawLineNo :: TabState -> Widget Name
 drawLineNo (TabState e@(Editor t _ vp) _ _ _) = 
     let rowNoWidth = maxRowNoWidth $ maxRowNo e
         minDisplayRowNo = addOne $ startingRow vp
-        maxDisplayRowNo = min (maxRowNo e) $ minDisplayRowNo + h (size vp) in 
+        maxDisplayRowNo = min (maxRowNo e) $ increase (subtractOne (h (size vp))) minDisplayRowNo in 
     withAttr lineNoAttr $ str $ unlines $ map (\no -> replicate (fromIntegral rowNoWidth - length no) ' ' ++ no) $ map show [minDisplayRowNo..maxDisplayRowNo]
 
 drawSplitter :: TabState -> Widget Name
