@@ -21,7 +21,7 @@ import Graphics.Vty.Output (displayBounds)
 import Control.Monad.IO.Class (liftIO)
 import Debug.Trace (traceM, trace, traceShowId, traceShowWith, traceShow)
 import Editor (newEditor, editedString, editedText)
-import Brick (Location(Location), AttrName, attrName, attrMap, withAttr, getVtyHandle, withBorderStyle, CursorLocation, cursorLocationName, nestEventM)
+import Brick (Location(Location), AttrName, attrName, attrMap, withAttr, getVtyHandle, withBorderStyle, CursorLocation, cursorLocationName, nestEventM, visible, textWidth)
 import Editing (Editing)
 import Brick.Widgets.Border (border, hBorder, vBorder)
 import Text (Text, lastRowAvailable)
@@ -33,6 +33,7 @@ import Integer.Positive (increase, subtractOne)
 import Data.Maybe (fromJust)
 import StatusLine (StatusLineState, newStatusLineState, renderStatusLine, handleStatusLineEvent, _editing, message, editing)
 import Data.List (find, findIndex)
+import Control.Arrow ((***))
 
 data TabState = TabState 
     { _editor :: Editor
@@ -51,6 +52,7 @@ data TabType
 data Name 
     = MainEditor
     | StatusLine
+    | TabViewport
     deriving (Eq, Ord, Show)
 
 selectItem :: (Eq a) => a -> ItemSelector a -> ItemSelector a 
@@ -175,6 +177,8 @@ handleMainEditorEvent (VtyEvent (EvKey (KChar 'n') [MCtrl])) = do
     itemSelector %= select (length newItems - 1) . setItems newItems
 
 handleMainEditorEvent (VtyEvent (EvKey KBackTab [])) = itemSelector %= (\selector -> select (1 + fromIntegral (selectedIndex selector)) selector)
+
+
 handleMainEditorEvent _ = halt
 
 updateStates :: EventM Name AppState ()
@@ -191,34 +195,40 @@ updateStates = do
     currentTab.editor %= setViewport vp'
 
 drawUI :: AppState -> [Widget Name]
-drawUI appState = let s = selectedItem (_itemSelector appState) in [ 
-    drawTabs appState 
-    <=> (drawLineNo s <+> drawSplitter s <+> drawEditor s)
-    <=> renderStatusLine (_statusLineState appState)
-    ]
+drawUI appState = 
+    let s = selectedItem (_itemSelector appState) 
+        (tabsWidget, tabsWidgetLength) = drawTabs appState in 
+        [ 
+            (hLimit tabsWidgetLength $ vLimit 3 $ B.viewport TabViewport Horizontal $ tabsWidget) <+> (hBorder <=> str " " <=> hBorder)
+            <=> (drawLineNo s <+> drawSplitter s <+> drawEditor s)
+            <=> renderStatusLine (_statusLineState appState)
+        ]
 
-drawTabs :: AppState -> Widget Name 
+combineFold :: (a -> b -> b) -> (c -> d -> d) -> (a, c) -> (b, d) -> (b, d)
+combineFold f g (x, y) (acc1, acc2) = (f x acc1, g y acc2)
+
+drawTabs :: AppState -> (Widget Name, Int)
 drawTabs (AppState selector _ _) = 
-    (foldr1 (<+>) $ NE.map (uncurry drawTab) $ 
+    (foldr1 (combineFold (<+>) (+)) $ NE.map (uncurry drawTab) $ 
         NE.zip (getItems selector) (NE.map (== selectedIndex selector) $ NE.fromList [0..]))
-    <+> (hBorder <=> str " " <=> hBorder)
 
-drawTab :: TabState -> Bool -> Widget Name 
+drawTab :: TabState -> Bool -> (Widget Name, Int)
 drawTab ts selected = (if selected then drawSelectedTab else drawUnselectedTab) (tabLabel ts)
     where tabLabel ts = case _tabType ts of 
                             File filename -> filename 
                             TmpBuffer -> "Untitled"
 
-drawSelectedTab :: String -> Widget Name
+drawSelectedTab :: String -> (Widget Name, Int)
 drawSelectedTab tabLabel = 
-    let tabName = " " ++ tabLabel ++ " " in border $ str tabName 
+    let tabName = " " ++ tabLabel ++ " " in 
+        (visible $ border $ str tabName, 2 + textWidth tabName)
 
-drawUnselectedTab :: String -> Widget Name 
+drawUnselectedTab :: String -> (Widget Name, Int)
 drawUnselectedTab tabLabel = 
     let tabName = " " ++ tabLabel ++ " "
         strWidget = str tabName
-        tabNameLength = length tabName in 
-        hLimit tabNameLength $ (hBorder <=> strWidget <=> hBorder) 
+        tabNameLength = textWidth tabName in 
+        (hLimit tabNameLength $ (hBorder <=> strWidget <=> hBorder), tabNameLength)
 
 
 drawLineNo :: TabState -> Widget Name 
