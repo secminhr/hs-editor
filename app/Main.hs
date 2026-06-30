@@ -3,7 +3,7 @@
 module Main (main) where
 
 import Lib
-import Viewport
+import SizedViewport
 import Editor
 import Lens.Micro.Platform (makeLenses, (%=), (.=), use, Lens', lens)
 import Brick.Widgets.Core (str, reportExtent, (<=>), vLimit, fill, (<+>), hLimit)
@@ -12,7 +12,7 @@ import Brick.Types (Widget(..), BrickEvent, EventM, BrickEvent(VtyEvent), getCon
 import qualified Brick.Types as BT
 import Brick.Main (customMain, neverShowCursor, showFirstCursor, resizeOrQuit, App(App), lookupExtent, continueWithoutRedraw, halt)
 import Brick.AttrMap (forceAttrMap, AttrMap)
-import Graphics.Vty (outputIface, Modifier (..), withBackColor, withForeColor, yellow)
+import Graphics.Vty (outputIface, Modifier (..), withBackColor, withForeColor, yellow, Vty)
 import qualified Graphics.Vty.CrossPlatform as V
 import Graphics.Vty.Config (defaultConfig)
 import Graphics.Vty.Attributes (defAttr, withStyle, reverseVideo)
@@ -25,18 +25,20 @@ import Brick (Location(Location), AttrName, attrName, attrMap, withAttr, getVtyH
 import Editing (Editing)
 import Brick.Widgets.Border (border, hBorder, vBorder)
 import Text (Text, lastRowAvailable)
-import Numeric.Natural (Natural)
 import ItemSelector (ItemSelector, newItemSelector, selectedItem, mapSelectedItem, getItems, setItems, select, selectedIndex)
 import qualified Data.List.NonEmpty as NE
+import Integer (Positive, fromInt)
+import Integer.Natural (Natural, addOne)
+import Integer.Positive (increase)
+import Data.Maybe (fromJust)
 
 data TabState = TabState 
     { _editor :: Editor
-    , _viewport :: Viewport
-    , _size :: Size
+    , _viewport :: SizedViewport
     , _text :: [Maybe String]
     , _cursorPos :: CursorPos
     , _tabType :: TabType
-    , _maxRowNo :: Natural
+    , _maxRowNo :: Positive
     }
 
 data TabType 
@@ -72,12 +74,21 @@ theMap = attrMap defAttr
     , (lineNoAttr, defAttr `withForeColor` yellow)
     ]
 
-maxRowNoWidth :: Natural -> Int 
-maxRowNoWidth maxRowNo = max 3 $ length (show maxRowNo)  
+maxRowNoWidth :: Positive -> Positive 
+maxRowNoWidth maxRowNo = fromJust $ fromInt $ max 3 $ length (show maxRowNo)  
 
-editorSize :: Int -> Int -> Natural -> Size
+-- intended underflow, indicating a valid editor can't be created
+editorSize :: Positive -> Positive -> Positive -> Size
 editorSize termW termH maxRowNo = 
-    Size (fromIntegral termW - fromIntegral (maxRowNoWidth maxRowNo) - 1) (fromIntegral termH - 3) 
+    Size (termW - (maxRowNoWidth maxRowNo) - 1) (termH - 3) 
+
+vtyDisplayBounds :: Vty -> IO (Positive, Positive)
+vtyDisplayBounds vty = do 
+    (termW, termH) <- displayBounds (outputIface vty)
+    let positiveTermW = fromJust $ fromInt termW 
+    let positiveTermH = fromJust $ fromInt termH
+    
+    return (positiveTermW, positiveTermH)
 
 main :: IO ()
 main = do 
@@ -85,11 +96,11 @@ main = do
     content <- readFile filename
     
     initialVty <- V.mkVty defaultConfig
-    (termW, termH) <- displayBounds (outputIface initialVty)
+    (termW, termH) <- vtyDisplayBounds initialVty
 
     let editor@(Editor t _) = newEditor content
-    let maxRowNo = 1 + lastRowAvailable t
-    let initTab = TabState editor new (editorSize termW termH maxRowNo) (map Just $ lines content) (CursorPos 0 0) (File filename) maxRowNo
+    let maxRowNo = addOne $ lastRowAvailable t
+    let initTab = TabState editor (new (editorSize termW termH maxRowNo) (Padding 0 0)) (map Just $ lines content) (CursorPos 0 0) (File filename) maxRowNo
     let state = AppState (newItemSelector (NE.singleton initTab))
 
     let app = App drawUI showFirstCursor handleEvent (return ()) (const $ theMap)
@@ -115,30 +126,32 @@ handleEvent (VtyEvent (EvKey (KChar 's') [MCtrl])) = do
 handleEvent (VtyEvent (EvKey (KChar 'n') [MCtrl])) = do 
     selector <- use itemSelector
     vty <- getVtyHandle
-    (termW, termH) <- liftIO $ displayBounds (outputIface vty)
+    (termW, termH) <- liftIO $ vtyDisplayBounds vty
+
+
     let content = " "
     let newItems = NE.append (getItems selector) $ 
-                    NE.singleton $ TabState (newEditor content) new (editorSize termW termH 1) (map Just $ lines content) (CursorPos 0 0) TmpBuffer 1
+                    NE.singleton $ TabState (newEditor content) (new (editorSize termW termH 1) (Padding 0 0)) (map Just $ lines content) (CursorPos 0 0) TmpBuffer 1
     itemSelector %= select (length newItems - 1) . setItems newItems
 
-handleEvent (VtyEvent (EvKey KBackTab [])) = itemSelector %= (\selector -> select (fromIntegral $ 1 + selectedIndex selector) selector)
+handleEvent (VtyEvent (EvKey KBackTab [])) = itemSelector %= (\selector -> select (1 + fromIntegral (selectedIndex selector)) selector)
 handleEvent _ = halt
 
 updateStates :: EventM Name AppState ()
 updateStates = do 
     editorState <- use (currentTab.editor)
     vpState <- use (currentTab.viewport)
-    sizeState <- use (currentTab.size)
-    let (vp', t', cursorPos') = frame editorState vpState sizeState 
+
+    let (vp', t', cursorPos') = frame editorState vpState 
     currentTab.viewport .= vp' 
     currentTab.text .= t' 
     currentTab.cursorPos .= cursorPos'
-    let newMaxRowNo = 1 + lastRowAvailable (editedText editorState)
+    let newMaxRowNo = addOne $ lastRowAvailable (editedText editorState)
     currentTab.maxRowNo .= newMaxRowNo
     
     vty <- getVtyHandle
-    (termW, termH) <- liftIO $ displayBounds (outputIface vty)
-    currentTab.size .= editorSize termW termH newMaxRowNo
+    (termW, termH) <- liftIO $ vtyDisplayBounds vty
+    currentTab.viewport %= setSize (editorSize termW termH newMaxRowNo) 
 
 drawUI :: AppState -> [Widget Name]
 drawUI appState = let s = selectedItem (_itemSelector appState) in [ 
@@ -171,18 +184,18 @@ drawUnselectedTab tabLabel =
 
 
 drawLineNo :: TabState -> Widget Name 
-drawLineNo (TabState (Editor t _) vp (Size _ h) _ _ _ maxRowNo) = 
+drawLineNo (TabState (Editor t _) vp _ _ _ maxRowNo) = 
     let rowNoWidth = maxRowNoWidth maxRowNo
-        minDisplayRowNo = 1 + startingRow vp
-        maxDisplayRowNo = min (fromIntegral maxRowNo) $ minDisplayRowNo + fromIntegral h in 
-    withAttr lineNoAttr $ str $ unlines $ map (\no -> replicate (rowNoWidth - length no) ' ' ++ no) $ map show [minDisplayRowNo..maxDisplayRowNo]
+        minDisplayRowNo = addOne $ startingRow vp
+        maxDisplayRowNo = min maxRowNo $ minDisplayRowNo + h (size vp) in 
+    withAttr lineNoAttr $ str $ unlines $ map (\no -> replicate (fromIntegral rowNoWidth - length no) ' ' ++ no) $ map show [minDisplayRowNo..maxDisplayRowNo]
 
 drawSplitter :: TabState -> Widget Name
 drawSplitter s = 
-    str $ unlines $ replicate (fromIntegral (h (_size s))) " "
+    str $ unlines $ replicate (fromIntegral (h (size (_viewport s)))) " "
 
 drawEditor :: TabState -> Widget Name
-drawEditor (TabState _ vp _ text (CursorPos row col) _ _) = reportExtent MainEditor $ B.showCursor MainEditorCursor (Location (fromIntegral col, fromIntegral row)) $ Widget BT.Greedy BT.Greedy $ do 
+drawEditor (TabState _ vp text (CursorPos row col) _ _) = reportExtent MainEditor $ B.showCursor MainEditorCursor (Location (fromIntegral col, fromIntegral row)) $ Widget BT.Greedy BT.Greedy $ do 
     render $ str $ unlines $ map (filter (/= '\n') . or "") text
     where or s ms = case ms of 
             Just string -> string 

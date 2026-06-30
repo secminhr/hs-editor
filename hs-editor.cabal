@@ -32,7 +32,6 @@ library
       Lib
       SizedViewport
       Text
-      Viewport
   other-modules:
       Paths_hs_editor
   autogen-modules:
@@ -77,7 +76,6 @@ test-suite hs-editor-test
       SizedViewportSpec
       TextEq
       TextSpec
-      ViewportSpec
       Paths_hs_editor
   autogen-modules:
       Paths_hs_editor

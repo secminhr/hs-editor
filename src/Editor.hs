@@ -17,64 +17,28 @@ module Editor
 
 import Editing (Editing, cursor, CursorMovement (..), edit, insert, backspace)
 import qualified Editing as E
-import AbsCursorPos (Position)
 import qualified AbsCursorPos as ACP
-import Viewport (Viewport, startingRow, startingCol, viewAt, scrollH, scrollV)
-import Numeric.Natural (Natural)
 import Text (Text, string, fromString, flatten)
 import qualified Text as T
+import SizedViewport (SizedViewport (size), makeVisible, Size(..), startingRow, startingCol)
+import Integer.Natural (strictlyIncrease, Natural)
 
 data CursorPos = CursorPos
     { row :: Natural
     , col :: Natural }
     deriving (Show)
 
-data Size = Size 
-    { w :: Natural
-    , h :: Natural }
-    deriving (Show)
-
 data Editor = Editor (Text Natural Natural) Editing
 newEditor :: String -> Editor 
 newEditor s = Editor (fromString s) E.empty
 
--- throws underflow if the minus result < 0
-infix 4 ~- 
-(~-) :: Natural -> Int -> Natural
-n ~- x = fromIntegral $ (fromIntegral n - x)
-
-infix 4 ~< 
-(~<) :: Natural -> Int -> Bool 
-n ~< x = fromIntegral n < x
-
-infix 4 ~>=
-(~>=) :: Natural -> Int -> Bool 
-n ~>= x = fromIntegral n >= x
-
-makeVisibleV :: Natural -> Natural -> Viewport -> Viewport
-makeVisibleV absRow h vp
-    | absRow ~< startingRow vp = viewAt (fromIntegral absRow) (startingCol vp)
-    | absRow ~>= startingRow vp + (fromIntegral h) = scrollV (fromIntegral $ 1 + absRow ~- (startingRow vp + (fromIntegral h))) vp 
-    | otherwise = vp
-
-makeVisibleH :: Natural -> Natural -> Viewport -> Viewport 
-makeVisibleH absCol w vp 
-    | absCol ~< startingCol vp = viewAt (startingRow vp) (fromIntegral absCol)
-    | absCol ~>= startingCol vp + (fromIntegral w) = scrollH (fromIntegral $ 1 + absCol ~- (startingCol vp + (fromIntegral w))) vp 
-    | otherwise = vp
-
-makeVisible :: Position -> Size -> Viewport -> Viewport
-makeVisible absCursor size vp = 
-    makeVisibleV (ACP.row absCursor) (h size) $ makeVisibleH (ACP.col absCursor) (w size) vp
-
-
-frame :: Editor -> Viewport -> Size -> (Viewport, [Maybe String], CursorPos)
-frame (Editor t e) vp size = 
+frame :: Editor -> SizedViewport -> (SizedViewport, [Maybe String], CursorPos)
+frame (Editor t e) vp = 
     let (t', absCursor) = edit e t 
-        vp' = makeVisible absCursor size vp in 
+        vp' = makeVisible absCursor vp in 
     ( vp'
-    , map ((take (fromIntegral $ w size) . drop (startingCol vp'). string) <$>) $ map (\r -> T.row (fromIntegral r) t') [startingRow vp' ..(startingRow vp' - 1 + fromIntegral (h size))]
-    , CursorPos (ACP.row absCursor ~- startingRow vp') (ACP.col absCursor ~- startingCol vp'))
+    , map ((take (fromIntegral $ w (size vp)) . drop (fromIntegral (startingCol vp')) . string) <$>) $ map (\r -> T.row r t') [startingRow vp' ..(strictlyIncrease (h (size vp)) (startingRow vp')  - 1)]
+    , CursorPos (ACP.row absCursor - startingRow vp') (ACP.col absCursor - startingCol vp'))
 
 editedString :: Editor -> String 
 editedString e = flatten $ editedText e
