@@ -100,8 +100,10 @@ main = do
     (termW, termH) <- vtyDisplayBounds initialVty
 
     let editor = newEditor content (new (editorSize termW termH (maxRowNo editor)) (Padding 0 0))
-    let initTab = TabState editor (map Just $ lines content) (CursorPos 0 0) (File filename)
-    let state = AppState (newItemSelector (NE.singleton initTab))
+    let (initT, initCursorPos) = frame editor
+
+    let initTab = TabState editor initT initCursorPos (File filename)
+    let state = AppState (newItemSelector (NE.singleton initTab)) (newStatusLineState StatusLine) MainEditor
 
     let app = App drawUI showFirstCursor handleEvent (return ()) (const $ theMap)
 
