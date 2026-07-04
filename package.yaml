@@ -25,6 +25,7 @@ dependencies:
 - containers
 - integer-types
 - text
+- microlens-platform
 
 ghc-options:
 - -Wall
@@ -53,7 +54,6 @@ executables:
     - brick
     - vty >= 6.0
     - vty-crossplatform
-    - microlens-platform
 
 tests:
   hs-editor-test:

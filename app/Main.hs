@@ -4,7 +4,7 @@ module Main (main) where
 
 import SizedViewport
 import Editor
-import Lens.Micro.Platform (makeLenses, (%=), (.=), use, Lens', lens)
+import Lens.Micro.Platform (makeLenses, (%=), (.=), use)
 import Brick.Widgets.Core (str, reportExtent, (<=>), vLimit, fill, (<+>), hLimit)
 import qualified Brick.Widgets.Core as B
 import Brick.Types (Widget(..), BrickEvent, EventM, BrickEvent(VtyEvent), getContext, availWidth, availHeight, ViewportType(Horizontal), Extent(Extent))
@@ -25,6 +25,7 @@ import Editing (Editing)
 import Brick.Widgets.Border (border, hBorder, vBorder)
 import Text (Text, lastRowAvailable)
 import ItemSelector (ItemSelector, newItemSelector, selectedItem, mapSelectedItem, getItems, setItems, select, selectedIndex)
+import ItemSelector.Lens (current, list)
 import qualified Data.List.NonEmpty as NE
 import Integer (Positive, fromInt)
 import Integer.Natural (Natural, addOne)
@@ -58,18 +59,13 @@ selectItem item selector = case findIndex (== item) (NE.toList (getItems selecto
                                 Just i -> select i selector
 
 data AppState = AppState
-    { _itemSelector :: ItemSelector TabState 
+    { _tabs :: ItemSelector TabState 
     , _statusLineState :: StatusLineState Name
     , _focusSelector :: ItemSelector Name
     }
 
 makeLenses ''AppState
 makeLenses ''TabState
-
-currentTab :: Lens' AppState TabState
-currentTab = lens 
-    (selectedItem . _itemSelector) 
-    (\appState modT -> appState { _itemSelector = mapSelectedItem (const modT) $ _itemSelector appState })
 
 reverseAttr :: AttrName
 reverseAttr = attrName "reverseText"
@@ -130,16 +126,16 @@ handleEvent e = do
 
 
 handleMainEditorEvent :: BrickEvent Name () -> EventM Name AppState ()
-handleMainEditorEvent (VtyEvent (EvKey KUp [])) = currentTab.editor %= upKey
-handleMainEditorEvent (VtyEvent (EvKey KDown [])) = currentTab.editor %= downKey
-handleMainEditorEvent (VtyEvent (EvKey KRight [])) = currentTab.editor %= rightKey
-handleMainEditorEvent (VtyEvent (EvKey KLeft [])) = currentTab.editor %= leftKey
-handleMainEditorEvent (VtyEvent (EvKey KEnter [])) = currentTab.editor %= enterKey
-handleMainEditorEvent (VtyEvent (EvKey (KChar c) [])) = currentTab.editor %= visibleInput c
-handleMainEditorEvent (VtyEvent (EvKey KBS [])) = currentTab.editor %= backspaceKey 
+handleMainEditorEvent (VtyEvent (EvKey KUp [])) = tabs.current.editor %= upKey
+handleMainEditorEvent (VtyEvent (EvKey KDown [])) = tabs.current.editor %= downKey
+handleMainEditorEvent (VtyEvent (EvKey KRight [])) = tabs.current.editor %= rightKey
+handleMainEditorEvent (VtyEvent (EvKey KLeft [])) = tabs.current.editor %= leftKey
+handleMainEditorEvent (VtyEvent (EvKey KEnter [])) = tabs.current.editor %= enterKey
+handleMainEditorEvent (VtyEvent (EvKey (KChar c) [])) = tabs.current.editor %= visibleInput c
+handleMainEditorEvent (VtyEvent (EvKey KBS [])) = tabs.current.editor %= backspaceKey 
 handleMainEditorEvent (VtyEvent (EvKey (KChar 's') [MCtrl])) = do 
-    e <- use (currentTab.editor)
-    tabType <- use (currentTab.tabType)
+    e <- use (tabs.current.editor)
+    tabType <- use (tabs.current.tabType)
     case tabType of 
         File filename -> liftIO $ writeFile filename $ editedString e
         _ -> do 
@@ -148,16 +144,16 @@ handleMainEditorEvent (VtyEvent (EvKey (KChar 's') [MCtrl])) = do
             statusLineState.editing .= True
 
 handleMainEditorEvent (VtyEvent (EvKey (KChar 'n') [MCtrl])) = do 
-    selector <- use itemSelector
+    tabList <- use (tabs.list)
     vty <- getVtyHandle
     (termW, termH) <- liftIO $ vtyDisplayBounds vty
 
     let content = ""
-    let newItems = NE.append (getItems selector) $ 
-                    NE.singleton $ TabState (newEditor content (new (editorSize termW termH 1) (Padding 0 0)) (fromJust . fromInt . textWidth)) TmpBuffer
-    itemSelector %= select (length newItems - 1) . setItems newItems
+    let newTabState = TabState (newEditor content (new (editorSize termW termH 1) (Padding 0 0)) (fromJust . fromInt . textWidth)) TmpBuffer          
+    tabs.list %= (<> NE.singleton newTabState)
+    tabs %= select (-1)
 
-handleMainEditorEvent (VtyEvent (EvKey KBackTab [])) = itemSelector %= (\selector -> select (1 + fromIntegral (selectedIndex selector)) selector)
+handleMainEditorEvent (VtyEvent (EvKey KBackTab [])) = tabs %= (\selector -> select (1 + fromIntegral (selectedIndex selector)) selector)
 handleMainEditorEvent _ = halt
 
 handleStatusLineEventAppState :: BrickEvent Name () -> EventM Name AppState ()
@@ -171,15 +167,15 @@ handleStatusLineEventAppState e = do
         case input of 
             Nothing -> statusLineState.message .= "Canceled"
             Just filename -> do 
-                e <- use (currentTab.editor)
+                e <- use (tabs.current.editor)
                 liftIO $ writeFile filename $ editedString e
-                currentTab.tabType .= File filename
+                tabs.current.tabType .= File filename
                 statusLineState.message .= "Saved to " ++ filename 
 
 
 drawUI :: AppState -> [Widget Name]
 drawUI appState = 
-    let s = selectedItem (_itemSelector appState) 
+    let s = selectedItem (_tabs appState) 
         (tabsWidget, tabsWidgetLength) = drawTabs appState in 
         [ 
             (hLimit tabsWidgetLength $ vLimit 3 $ B.viewport TabViewport Horizontal $ tabsWidget) <+> (hBorder <=> str " " <=> hBorder)
