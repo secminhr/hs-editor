@@ -131,20 +131,7 @@ handleEvent e = do
     fSelector <- use focusSelector  
     case selectedItem fSelector of 
         MainEditor -> handleMainEditorEvent e 
-        StatusLine -> do 
-            status <- use statusLineState
-            (newStatusLine, input) <- nestEventM status (handleStatusLineEvent e)
-            statusLineState .= newStatusLine
-            if _editing newStatusLine then return ()
-            else do 
-                focusSelector %= selectItem MainEditor 
-                case input of 
-                    Nothing -> statusLineState.message .= "Canceled"
-                    Just filename -> do 
-                        e <- use (currentTab.editor)
-                        liftIO $ writeFile filename $ editedString e
-                        currentTab.tabType .= File filename
-                        statusLineState.message .= "Saved to " ++ filename
+        StatusLine -> handleStatusLineEventAppState e
 
 
 handleMainEditorEvent :: BrickEvent Name () -> EventM Name AppState ()
@@ -177,9 +164,23 @@ handleMainEditorEvent (VtyEvent (EvKey (KChar 'n') [MCtrl])) = do
     itemSelector %= select (length newItems - 1) . setItems newItems
 
 handleMainEditorEvent (VtyEvent (EvKey KBackTab [])) = itemSelector %= (\selector -> select (1 + fromIntegral (selectedIndex selector)) selector)
-
-
 handleMainEditorEvent _ = halt
+
+handleStatusLineEventAppState :: BrickEvent Name () -> EventM Name AppState ()
+handleStatusLineEventAppState e = do 
+    status <- use statusLineState
+    (newStatusLine, input) <- nestEventM status (handleStatusLineEvent e)
+    statusLineState .= newStatusLine
+    if _editing newStatusLine then return ()
+    else do 
+        focusSelector %= selectItem MainEditor 
+        case input of 
+            Nothing -> statusLineState.message .= "Canceled"
+            Just filename -> do 
+                e <- use (currentTab.editor)
+                liftIO $ writeFile filename $ editedString e
+                currentTab.tabType .= File filename
+                statusLineState.message .= "Saved to " ++ filename 
 
 updateStates :: EventM Name AppState ()
 updateStates = do 
