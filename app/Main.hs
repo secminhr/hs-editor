@@ -130,13 +130,13 @@ handleEvent e = do
 
 
 handleMainEditorEvent :: BrickEvent Name () -> EventM Name AppState ()
-handleMainEditorEvent (VtyEvent (EvKey KUp [])) = (currentTab.editor %= upKey) >> updateStates
-handleMainEditorEvent (VtyEvent (EvKey KDown [])) = (currentTab.editor %= downKey) >> updateStates
-handleMainEditorEvent (VtyEvent (EvKey KRight [])) = (currentTab.editor %= rightKey) >> updateStates
-handleMainEditorEvent (VtyEvent (EvKey KLeft [])) = (currentTab.editor %= leftKey) >> updateStates
-handleMainEditorEvent (VtyEvent (EvKey KEnter [])) = (currentTab.editor %= enterKey) >> updateStates
-handleMainEditorEvent (VtyEvent (EvKey (KChar c) [])) = (currentTab.editor %= visibleInput c) >> updateStates
-handleMainEditorEvent (VtyEvent (EvKey KBS [])) = (currentTab.editor %= backspaceKey) >> updateStates
+handleMainEditorEvent (VtyEvent (EvKey KUp [])) = currentTab.editor %= upKey
+handleMainEditorEvent (VtyEvent (EvKey KDown [])) = currentTab.editor %= downKey
+handleMainEditorEvent (VtyEvent (EvKey KRight [])) = currentTab.editor %= rightKey
+handleMainEditorEvent (VtyEvent (EvKey KLeft [])) = currentTab.editor %= leftKey
+handleMainEditorEvent (VtyEvent (EvKey KEnter [])) = currentTab.editor %= enterKey
+handleMainEditorEvent (VtyEvent (EvKey (KChar c) [])) = currentTab.editor %= visibleInput c
+handleMainEditorEvent (VtyEvent (EvKey KBS [])) = currentTab.editor %= backspaceKey 
 handleMainEditorEvent (VtyEvent (EvKey (KChar 's') [MCtrl])) = do 
     e <- use (currentTab.editor)
     tabType <- use (currentTab.tabType)
@@ -176,14 +176,6 @@ handleStatusLineEventAppState e = do
                 currentTab.tabType .= File filename
                 statusLineState.message .= "Saved to " ++ filename 
 
-updateStates :: EventM Name AppState ()
-updateStates = do 
-    editorState <- use (currentTab.editor)
-    
-    vty <- getVtyHandle
-    (termW, termH) <- liftIO $ vtyDisplayBounds vty
-    let vp' = setSize (editorSize termW termH (maxRowNo editorState)) (viewport editorState) 
-    currentTab.editor %= setViewport vp'
 
 drawUI :: AppState -> [Widget Name]
 drawUI appState = 
