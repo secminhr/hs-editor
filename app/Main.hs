@@ -4,7 +4,7 @@ module Main (main) where
 
 import SizedViewport
 import Editor
-import Lens.Micro.Platform (makeLenses, (%=), (.=), use)
+import Lens.Micro.Platform (makeLenses, (%=), (.=), use, (^.))
 import Brick.Widgets.Core (str, reportExtent, (<=>), vLimit, fill, (<+>), hLimit)
 import qualified Brick.Widgets.Core as B
 import Brick.Types (Widget(..), BrickEvent, EventM, BrickEvent(VtyEvent), getContext, availWidth, availHeight, ViewportType(Horizontal), Extent(Extent))
@@ -175,21 +175,22 @@ handleStatusLineEventAppState e = do
 
 drawUI :: AppState -> [Widget Name]
 drawUI appState = 
-    let s = selectedItem (_tabs appState) 
-        (tabsWidget, tabsWidgetLength) = drawTabs appState in 
+    let s = selectedItem (_tabs appState) in 
         [ 
-            (hLimit tabsWidgetLength $ vLimit 3 $ B.viewport TabViewport Horizontal $ tabsWidget) <+> (hBorder <=> str " " <=> hBorder)
-            <=> (drawLineNo s <+> drawSplitter s <+> drawEditor s)
+            drawTabs appState <+> (hBorder <=> str " " <=> hBorder)
+            <=> (drawLineNo s <+> drawSplitter s <+> drawEditor (_editor s))
             <=> renderStatusLine (_statusLineState appState)
         ]
 
-combineFold :: (a -> b -> b) -> (c -> d -> d) -> (a, c) -> (b, d) -> (b, d)
-combineFold f g (x, y) (acc1, acc2) = (f x acc1, g y acc2)
-
-drawTabs :: AppState -> (Widget Name, Int)
+drawTabs :: AppState -> Widget Name
 drawTabs (AppState selector _ _) = 
-    (foldr1 (combineFold (<+>) (+)) $ NE.map (uncurry drawTab) $ 
-        NE.zip (getItems selector) (NE.map (== selectedIndex selector) $ NE.fromList [0..]))
+    let tabs = 
+            NE.map (uncurry drawTab) $ 
+            NE.zip (getItems selector) (NE.map (== selectedIndex selector) $ 
+            NE.fromList [0..]) 
+        lengths = sum (NE.map snd tabs)
+        tabsWidget = foldr1 (<+>) $ NE.map fst tabs in 
+                hLimit lengths $ vLimit 3 $ B.viewport TabViewport Horizontal $ tabsWidget
 
 drawTab :: TabState -> Bool -> (Widget Name, Int)
 drawTab ts selected = (if selected then drawSelectedTab else drawUnselectedTab) (tabLabel ts)
@@ -211,8 +212,9 @@ drawUnselectedTab tabLabel =
 
 
 drawLineNo :: TabState -> Widget Name 
-drawLineNo (TabState e@(Editor t _ vp _) _) = 
-    let rowNoWidth = maxRowNoWidth $ maxRowNo e
+drawLineNo (TabState e _) = 
+    let vp = viewport e 
+        rowNoWidth = maxRowNoWidth $ maxRowNo e
         minDisplayRowNo = addOne $ startingRow vp
         maxDisplayRowNo = min (maxRowNo e) $ increase (subtractOne (h (size vp))) minDisplayRowNo in 
     withAttr lineNoAttr $ str $ unlines $ map (\no -> replicate (fromIntegral rowNoWidth - length no) ' ' ++ no) $ map show [minDisplayRowNo..maxDisplayRowNo]
@@ -221,8 +223,8 @@ drawSplitter :: TabState -> Widget Name
 drawSplitter s = 
     str $ unlines $ replicate (fromIntegral (h (size (viewport (_editor s))))) " "
 
-drawEditor :: TabState -> Widget Name
-drawEditor (TabState e _) =
+drawEditor :: Editor -> Widget Name
+drawEditor e =
     let (text, CursorPos row col) = frame e in
         reportExtent MainEditor $ B.showCursor MainEditor (Location (fromIntegral col, fromIntegral row)) $ Widget BT.Greedy BT.Greedy $ do 
         render $ str $ unlines $ map (filter (/= '\n') . or "") text
