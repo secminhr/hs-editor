@@ -26,7 +26,8 @@ import SizedViewport (SizedViewport (size), makeVisible, Size(..), startingRow, 
 import Integer.Natural (strictlyIncrease, Natural)
 import Data.Maybe (fromJust)
 import AbsCursorPos (Position(Position))
-import Integer (Positive, IntegerConvert (convert))
+import Integer (Positive, IntegerConvert (convert), narrow)
+import Data.List (uncons)
 
 data CursorPos = CursorPos
     { row :: Natural
@@ -43,6 +44,14 @@ renderingAbsCursor line f p =
     let beforeCursorString = take (fromIntegral (ACP.col p)) line in
         Position (ACP.row p) (convert $ f beforeCursorString)
 
+renderingCursorLength :: String -> (String -> Natural) -> Position -> Positive 
+renderingCursorLength line f p = 
+    let beforeCursorDropped = drop (fromIntegral (ACP.col p)) line in
+        case uncons beforeCursorDropped of 
+            Nothing -> 1
+            Just ('\n', _) -> 1 
+            Just (c, _) -> if f [c] > 0 then fromJust (narrow (f [c])) else 1
+
 drop' :: (String -> Natural) -> Natural -> String -> String
 drop' f n "" = ""
 drop' f 0 s = s 
@@ -53,7 +62,7 @@ drop' f n (c:cs)
 
 take' :: (String -> Natural) -> Natural -> String -> String 
 take' f n "" = ""
-take' f 0 s = s 
+take' f 0 s = ""
 take' f n (c:cs)
     | f [c] == 0 = c:take' f n cs 
     | f [c] == 1 = c:take' f (n-1) cs 
@@ -84,7 +93,7 @@ makeCursorVisible :: Editor -> Editor
 makeCursorVisible (Editor t e vp f) = 
     let (t', absCursor) = edit e t 
         rowString = string $ fromJust $ T.row (ACP.row absCursor) t' in 
-    Editor t e (makeVisible (renderingAbsCursor rowString f absCursor) vp) f
+    Editor t e (makeVisible (renderingAbsCursor rowString f absCursor) (renderingCursorLength rowString f absCursor) vp) f
 
 upKey :: Editor -> Editor 
 upKey (Editor t e vp f) = makeCursorVisible $ Editor t (cursor CUp e) vp f
