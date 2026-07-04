@@ -119,8 +119,8 @@ main = do
 
 handleEvent :: BrickEvent Name () -> EventM Name AppState ()
 handleEvent e = do 
-    fSelector <- use focusSelector  
-    case selectedItem fSelector of 
+    focus <- use (focusSelector.current)
+    case focus of 
         MainEditor -> handleMainEditorEvent e 
         StatusLine -> handleStatusLineEventAppState e
 
