@@ -2,7 +2,6 @@
 
 module Main (main) where
 
-import Lib
 import SizedViewport
 import Editor
 import Lens.Micro.Platform (makeLenses, (%=), (.=), use, Lens', lens)
